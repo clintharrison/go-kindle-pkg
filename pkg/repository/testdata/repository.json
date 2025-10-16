@@ -1,0 +1,301 @@
+{
+  "manifest_version": 1,
+  "id": "org.kindlemodding.examplerepo",
+  "name": "Kindlemodding Example Repository",
+  "description": "An example repository to demonstrate the manifest format",
+  "packages": {
+    "com.kindlemodding.examplepackage": {
+      "name": "Example Package",
+      "author": "Hackerdude",
+      "description": "This is a test package",
+      "artifacts": [
+        {
+          "url": "packages/com.kindlemodding.examplepackage/artifacts/com.kindlemodding.examplepackage_1.2.3_armhf-armel.kpkg",
+          "version": [ 1, 2, 3 ],
+          "dependencies": [
+            {
+              "repository": "org.kindlemodding.examplerepo",
+              "id": "io.github.niluje.fbink",
+              "min": [ 0, 6, 10 ],
+              "max": [ 0, 7, 0 ]
+            },
+            {
+              "id": "org.lua"
+            },
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 0 ]
+            },
+            {
+              "id": "testmax",
+              "max": [ 1, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        }
+      ]
+    },
+    "io.github.niluje.fbink": {
+      "name": "FBInk",
+      "author": "NiLuJe",
+      "description": "This is fbink",
+      "artifacts": [
+        {
+          "url": "packages/fbink/artifacts/fbink_0.6.9_armhf-armel.kpkg",
+          "version": [ 0, 6, 9 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 9, 0 ]
+            },
+            {
+              "id": "testmax",
+              "max": [ 1, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/fbink/artifacts/fbink_0.6.10_armhf-armel.kpkg",
+          "version": [ 0, 6, 10 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 0 ]
+            },
+            {
+              "id": "testmax",
+              "max": [ 1, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/fbink/artifacts/fbink_0.6.11_armhf-armel.kpkg",
+          "version": [ 0, 6, 11 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 0 ]
+            },
+            {
+              "id": "testmax",
+              "max": [ 1, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/fbink/artifacts/fbink_0.6.99_armhf-armel.kpkg",
+          "version": [ 0, 6, 99 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 0 ]
+            },
+            {
+              "id": "testmax",
+              "max": [ 1, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/fbink/artifacts/fbink_0.7.0_armhf-armel.kpkg",
+          "version": [ 0, 7, 0 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 0 ]
+            },
+            {
+              "id": "testmax",
+              "max": [ 1, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        }
+      ]
+    },
+    "org.lua": {
+      "name": "Lua",
+      "author": "Hackerdude",
+      "description": "This is Lua",
+      "artifacts": [
+        {
+          "url": "packages/lua/artifacts/lua_1.2.3_armhf-armel.kpkg",
+          "version": [ 9, 2, 3 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 1 ],
+              "max": [ 1, 9, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/lua/artifacts/lua_1.2.5_armhf-armel.kpkg",
+          "version": [ 1, 2, 5 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 0, 1 ],
+              "max": [ 1, 9, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/lua/artifacts/lua_4.5.6_armhf-armel.kpkg",
+          "version": [ 4, 5, 6 ],
+          "dependencies": [
+            {
+              "id": "testmin",
+              "min": [ 1, 9, 0 ],
+              "max": [ 2, 0, 0 ]
+            }
+          ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        }
+      ]
+    },
+    "testmin": {
+      "name": "Testmin",
+      "author": "Hackerdude",
+      "description": "This is NOT Lua",
+      "artifacts": [
+        {
+          "url": "packages/testmin/artifacts/testmin_0.1.2_armhf-armel.kpkg",
+          "version": [ 0, 1, 2 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmin/artifacts/testmin_0.2.3_armhf-armel.kpkg",
+          "version": [ 0, 2, 3 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmin/artifacts/testmin_0.99.99_armhf-armel.kpkg",
+          "version": [ 0, 99, 99 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmin/artifacts/testmin_1.0.0_armhf-armel.kpkg",
+          "version": [ 1, 0, 0 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmin/artifacts/testmin_1.1.1_armhf-armel.kpkg",
+          "version": [ 1, 1, 1 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmin/artifacts/testmin_1.999.999_armhf-armel.kpkg",
+          "version": [ 1, 999, 999 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        }
+      ]
+    },
+    "testmax": {
+      "name": "Testmax",
+      "author": "Hackerdude",
+      "description": "This is NOT Lua",
+      "artifacts": [
+        {
+          "url": "packages/testmax/artifacts/testmax_0.1.2_armhf-armel.kpkg",
+          "version": [ 0, 1, 2 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmax/artifacts/testmax_0.2.3_armhf-armel.kpkg",
+          "version": [ 0, 2, 3 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmax/artifacts/testmax_0.99.99_armhf-armel.kpkg",
+          "version": [ 0, 99, 99 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmax/artifacts/testmax_1.0.0_armhf-armel.kpkg",
+          "version": [ 1, 0, 0 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmax/artifacts/testmax_1.1.1_armhf-armel.kpkg",
+          "version": [ 1, 1, 1 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        },
+        {
+          "url": "packages/testmax/artifacts/testmax_1.999.999_armhf-armel.kpkg",
+          "version": [ 1, 999, 999 ],
+          "supported_arch": [
+            "armhf",
+            "armel"
+          ]
+        }
+      ]
+    }
+  }
+}
