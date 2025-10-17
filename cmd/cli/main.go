@@ -1,40 +1,40 @@
 package main
 
 import (
+	"context"
 	"log/slog"
 	"os"
+	"os/signal"
+	"time"
 
-	"github.com/clintharrison/go-kindle-pkg/pkg/kpkg"
+	"github.com/lmittmann/tint"
 )
 
 func initLogger() {
-	lvl := new(slog.LevelVar)
-	lvl.Set(slog.LevelDebug)
-	logger := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{
-		Level: lvl,
-	}))
-	slog.SetDefault(logger)
+	w := os.Stderr
+	defaultLevel := slog.LevelInfo
+	if os.Getenv("DEBUG") == "1" {
+		defaultLevel = slog.LevelDebug
+	}
+	slog.SetDefault(slog.New(
+		tint.NewHandler(w, &tint.Options{
+			Level:      defaultLevel,
+			TimeFormat: time.TimeOnly,
+		}),
+	))
 }
 
 func main() {
+	ctx := context.Background()
+	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
+	defer cancel()
+
 	initLogger()
 
-	baseDir := os.Getenv("HOME") + "/Downloads/"
-	if h, _ := os.Hostname(); h == "kindle" {
-		baseDir = "/mnt/us/kpm/packages/"
-	}
-	path := baseDir + "koreader_1.2.0_armhf.kpkg"
-	pkg, err := kpkg.New(path)
-	if err != nil {
-		slog.Error("failed to open kpkg", "error", err, "path", path)
-		return
-	}
-	defer pkg.Close()
-
-	if pkg.Manifest == nil {
-		slog.Error("kpkg has no manifest")
-		return
+	rootCmd := NewRootCmd()
+	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		os.Exit(1)
 	}
 
-	slog.Info("kpkg loaded", "id", pkg.Manifest.ID, "name", pkg.Manifest.Name)
+	os.Exit(0)
 }

@@ -106,7 +106,7 @@ func do() error {
 
 func main() {
 	if err := do(); err != nil {
-		fmt.Fprintln(os.Stderr, "Error:", err)
+		// fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}
 }

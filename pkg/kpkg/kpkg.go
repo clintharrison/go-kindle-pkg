@@ -27,7 +27,7 @@ type KPKG struct {
 	closerFuncs []func() error
 }
 
-func New(path string) (*KPKG, error) {
+func Open(path string) (*KPKG, error) {
 	kpkg := &KPKG{}
 
 	f, err := os.Open(path)
