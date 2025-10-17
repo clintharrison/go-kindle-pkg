@@ -11,7 +11,7 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/clintharrison/go-kindle-pkg/pkg/repository"
+	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
 	"github.com/pingcap/errors"
 	"github.com/ulikunitz/xz"
 )
@@ -19,7 +19,7 @@ import (
 type KPKG struct {
 	mu sync.Mutex
 
-	Manifest *repository.Package
+	Manifest *manifest.Package
 
 	file      *os.File
 	tarReader *tar.Reader
@@ -86,7 +86,7 @@ func (k *KPKG) ReadMetadata() error {
 			if err != nil {
 				return err
 			}
-			var m repository.Package
+			var m manifest.Package
 			err = json.Unmarshal(data, &m)
 			if err != nil {
 				return err
