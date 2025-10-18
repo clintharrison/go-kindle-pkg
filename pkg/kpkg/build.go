@@ -76,40 +76,41 @@ func Build(_ context.Context, rootPath string, dest string, optFuncs ...BuildOpt
 		}
 		info, err := d.Info()
 		if err != nil {
-			return err
+			return errors.AddStack(err)
 		}
 		linkTarget := ""
 		if typ := d.Type(); typ == fs.ModeSymlink {
 			var err error
 			linkTarget, err = os.Readlink(name)
 			if err != nil {
-				return err
+				return errors.AddStack(err)
 			}
 		} else if !typ.IsRegular() && typ != fs.ModeDir {
 			return errors.New("tar: cannot add non-regular file")
 		}
 		h, err := tar.FileInfoHeader(info, linkTarget)
 		if err != nil {
-			return err
+			return errors.AddStack(err)
 		}
 
 		h, err = normalizeHeader(h, info, rootPath, name)
 		if err != nil {
 			return errors.Wrap(err, "normalizing tar header")
 		}
-		if err := tw.WriteHeader(h); err != nil {
-			return err
+		err = tw.WriteHeader(h)
+		if err != nil {
+			return errors.AddStack(err)
 		}
 		if !d.Type().IsRegular() {
 			return nil
 		}
 		f, err := os.Open(name)
 		if err != nil {
-			return err
+			return errors.AddStack(err)
 		}
 		defer f.Close()
 		_, err = io.Copy(tw, f)
-		return err
+		return errors.AddStack(err)
 	})
 	if err != nil {
 		return errors.Wrap(err, "walking root fs")
@@ -121,7 +122,7 @@ func normalizeHeader(h *tar.Header, d fs.FileInfo, rootPath, name string) (*tar.
 	// Make path relative to rootPath
 	relPath, err := filepath.Rel(rootPath, name)
 	if err != nil {
-		return nil, err
+		return nil, errors.AddStack(err)
 	}
 	if relPath == "." {
 		h.Name = "./"
@@ -134,7 +135,7 @@ func normalizeHeader(h *tar.Header, d fs.FileInfo, rootPath, name string) (*tar.
 	h.Gid = 0
 	h.Uname = ""
 	h.Gname = ""
-	h.Mode = int64(h.Mode & 0o777)
+	h.Mode &= 0o777
 	h.ModTime = time.Date(2000, time.January, 1, 0, 0, 0, 0, time.UTC)
 	h.Format = tar.FormatGNU
 
