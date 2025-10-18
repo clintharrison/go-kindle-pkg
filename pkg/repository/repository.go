@@ -110,7 +110,14 @@ func readJSONFromURL(u *url.URL, v interface{}) error {
 	var r io.Reader
 	switch u.Scheme {
 	case "http", "https":
-		resp, err := http.Get(u.String())
+		req := http.Request{
+			Method: "GET",
+			URL:    u,
+			Header: http.Header{
+				"Accept": []string{"application/json"},
+			},
+		}
+		resp, err := http.DefaultClient.Do(&req)
 		if err != nil {
 			return err
 		}
