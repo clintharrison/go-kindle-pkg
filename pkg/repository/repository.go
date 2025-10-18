@@ -107,6 +107,7 @@ func readJSONFromURL(ctx context.Context, u *url.URL, v interface{}) error {
 	var r io.Reader
 	switch u.Scheme {
 	case "http", "https":
+		// TODO: use retryablehttp?
 		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
 		if err != nil {
 			return err
