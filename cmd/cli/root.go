@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/clintharrison/go-kindle-pkg/cmd/cli/createkpkg"
 	"github.com/clintharrison/go-kindle-pkg/cmd/cli/extract"
 	"github.com/clintharrison/go-kindle-pkg/cmd/cli/install"
 	"github.com/clintharrison/go-kindle-pkg/cmd/cli/list"
@@ -22,6 +23,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.PersistentFlags().String("install-dir", version.BaseDir+"/pkgs", "Directory for unpacked apps and libraries")
 	cmd.PersistentFlags().String("download-dir", version.BaseDir+"/downloads", "Directory to store downloaded .kpkg files")
 
+	cmd.AddCommand(createkpkg.NewCommand())
 	cmd.AddCommand(extract.NewCommand())
 	cmd.AddCommand(install.NewCommand())
 	cmd.AddCommand(list.NewCommand())
