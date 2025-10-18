@@ -33,3 +33,15 @@ type RepositoryConfig struct {
 	Description string             `json:"description"`
 	Packages    map[string]Package `json:"packages"`
 }
+
+// Manifest represents the manifest.json inside a kpkg archive.
+// TODO: Figure out if this can be unified with the Package struct in a Repository?
+type Manifest struct {
+	ID            string                `json:"id"`
+	Name          string                `json:"name"`
+	Author        string                `json:"author"`
+	Description   string                `json:"description"`
+	Version       SemanticVersion       `json:"version"`
+	SupportedArch []string              `json:"supported_arch"`
+	Dependencies  map[string]Dependency `json:"dependencies"`
+}

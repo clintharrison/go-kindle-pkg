@@ -38,6 +38,7 @@ type Constraint struct {
 }
 
 // Allows checks whether an artifact matches this constraint.
+// TODO: Move this to an interface method and out of the resolver package; Constraint can be generic perhaps?
 func (c *Constraint) Allows(art *Artifact) bool {
 	if c.Min != nil && art.Version.Compare(*c.Min) < 0 {
 		return false

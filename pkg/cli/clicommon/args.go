@@ -1,4 +1,4 @@
-package resolve
+package clicommon
 
 import (
 	"fmt"
@@ -23,14 +23,14 @@ var constraintRegexp = regexp.MustCompile(
 		// comma and spaces are allowed between constraints
 		`)[\s,]*)*$`)
 
-// parseConstraint handles a very basic spec for now:
+// ParseConstraint handles a very basic spec for now:
 //
 //	package-id
 //	package-id=version (or ==)
 //	package-id>=version (must be >=)
 //	package-id<version  (must only be <)
 //	package-id>=1.0.0,<2.0.0 (combined constraints, order doesn't matter)
-func parseConstraint(arg string) (*resolver.Constraint, error) {
+func ParseConstraint(arg string) (*resolver.Constraint, error) {
 	matches := constraintRegexp.FindStringSubmatch(arg)
 	if matches == nil {
 		return nil, fmt.Errorf("unable to parse constraint from arg %q", arg)
@@ -41,7 +41,7 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 
 	if eql := matches[constraintRegexp.SubexpIndex("eql")]; eql != "" {
 		// eql will be the numeric portion from the regexp (e.g. "1.2.3")
-		sv, err := parseVersion(eql)
+		sv, err := ParseVersion(eql)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse equality version from arg %q: %w", arg, err)
 		}
@@ -55,7 +55,7 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 	}
 
 	if match := matches[constraintRegexp.SubexpIndex("min")]; match != "" {
-		sv, err := parseVersion(match)
+		sv, err := ParseVersion(match)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse minimum version from arg %q: %w", arg, err)
 		}
@@ -63,7 +63,7 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 	}
 
 	if match := matches[constraintRegexp.SubexpIndex("max")]; match != "" {
-		sv, err := parseVersion(match)
+		sv, err := ParseVersion(match)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse maximum version from arg %q: %w", arg, err)
 		}
@@ -73,7 +73,7 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 	return &c, nil
 }
 
-func parseVersion(vstr string) (*manifest.SemanticVersion, error) {
+func ParseVersion(vstr string) (*manifest.SemanticVersion, error) {
 	sv := &manifest.SemanticVersion{} //nolint:exhaustruct
 	// handle 1, 1.0, 1.0.0
 	// split on '.' and parse up to three components
@@ -95,10 +95,10 @@ func parseVersion(vstr string) (*manifest.SemanticVersion, error) {
 	return sv, nil
 }
 
-func constraintsFromArgs(args []string) ([]*resolver.Constraint, error) {
+func ConstraintsFromArgs(args []string) ([]*resolver.Constraint, error) {
 	var constraints []*resolver.Constraint
 	for _, arg := range args {
-		c, err := parseConstraint(arg)
+		c, err := ParseConstraint(arg)
 		if err != nil {
 			return nil, errors.Wrapf(err, "failed to parse constraint from arg %q", arg)
 		}

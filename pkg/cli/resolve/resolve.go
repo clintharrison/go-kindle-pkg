@@ -19,7 +19,7 @@ func NewCommand() *cobra.Command {
 			}
 
 			// parse the human-friendly-ish constraints
-			constraints, err := constraintsFromArgs(args)
+			constraints, err := clicommon.ConstraintsFromArgs(args)
 			if err != nil {
 				return errors.Wrap(err, "failed to parse package constraints from args")
 			}

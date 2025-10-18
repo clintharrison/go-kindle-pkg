@@ -19,7 +19,7 @@ import (
 type KPKG struct {
 	mu sync.Mutex
 
-	Manifest *manifest.Package
+	Manifest *manifest.Manifest
 
 	file      *os.File
 	tarReader *tar.Reader
@@ -41,9 +41,17 @@ func Open(path string) (*KPKG, error) {
 	r, err = xz.NewReader(f)
 	if err != nil {
 		slog.Debug("not xz compressed, trying gzip", "error", err)
+		_, err = f.Seek(0, 0)
+		if err != nil {
+			return nil, errors.Wrapf(err, "f.Seek(0,0) for %q", path)
+		}
 		r, err = gzip.NewReader(f)
 		if err != nil {
 			slog.Debug("not gzip compressed, using raw file", "error", err)
+			_, err = f.Seek(0, 0)
+			if err != nil {
+				return nil, errors.Wrapf(err, "f.Seek(0,0) for %q", path)
+			}
 			r = f
 		}
 	}
@@ -88,10 +96,10 @@ func (k *KPKG) ReadMetadata() error {
 			if err != nil {
 				return errors.Wrapf(err, "io.ReadFull() for manifest.json")
 			}
-			var m manifest.Package
+			var m manifest.Manifest
 			err = json.Unmarshal(data, &m)
 			if err != nil {
-				return errors.Wrapf(err, "json.Unmarshal() to manifest.Package")
+				return errors.Wrapf(err, "json.Unmarshal() to manifest.Manifest")
 			}
 			k.Manifest = &m
 			return nil
