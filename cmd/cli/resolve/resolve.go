@@ -33,7 +33,7 @@ func NewCommand() *cobra.Command {
 				return errors.Wrap(err, "failed to create repository from URLs")
 			}
 
-			packages, err := repo.FetchPackages()
+			packages, err := repo.FetchPackages(cmd.Context())
 			if err != nil {
 				cmd.OutOrStderr().Write([]byte(fmt.Sprintf("ERROR: Unable to fetch packages from repositories:\n%v\n", err)))
 				return errors.Wrap(err, "failed to fetch packages from repositories")

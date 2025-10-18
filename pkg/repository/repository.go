@@ -1,6 +1,7 @@
 package repository
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -56,8 +57,7 @@ func NewPackageArtifact(packageID string, repo *manifest.RepositoryConfig, pkg *
 }
 
 type Repository interface {
-	FetchPackages() ([]*PackageArtifact, error)
-	ResolvePackages(requests []string) ([]*PackageArtifact, error)
+	FetchPackages(ctx context.Context) ([]*PackageArtifact, error)
 }
 
 type MultiRepository struct {
@@ -86,11 +86,11 @@ func NewFromURLs(urls ...string) (Repository, error) {
 }
 
 // FetchPackages fetches each repository and adds their packages to the collection of PackageArtifacts.
-func (mr *MultiRepository) FetchPackages() ([]*PackageArtifact, error) {
+func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*PackageArtifact, error) {
 	mr.pas = []*PackageArtifact{}
 	for _, u := range mr.urls {
 		var repoConfig manifest.RepositoryConfig
-		if err := readJSONFromURL(u, &repoConfig); err != nil {
+		if err := readJSONFromURL(ctx, u, &repoConfig); err != nil {
 			return nil, fmt.Errorf("failed to read repository from %q: %w", u.String(), err)
 		}
 
@@ -103,23 +103,17 @@ func (mr *MultiRepository) FetchPackages() ([]*PackageArtifact, error) {
 	return mr.pas, nil
 }
 
-func (r *MultiRepository) ResolvePackages(requests []string) ([]*PackageArtifact, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
-func readJSONFromURL(u *url.URL, v interface{}) error {
+func readJSONFromURL(ctx context.Context, u *url.URL, v interface{}) error {
 	var r io.Reader
 	switch u.Scheme {
 	case "http", "https":
-		req := http.Request{
-			Method: "GET",
-			URL:    u,
-			Header: http.Header{
-				"Accept":     []string{"application/json"},
-				"User-Agent": []string{version.FullVersion},
-			},
+		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		if err != nil {
+			return err
 		}
-		resp, err := http.DefaultClient.Do(&req)
+		req.Header.Set("Accept", "application/json")
+		req.Header.Set("User-Agent", version.FullVersion)
+		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
 			return err
 		}

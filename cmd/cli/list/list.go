@@ -35,7 +35,7 @@ func NewCommand() *cobra.Command {
 			}
 
 			// network call, eek!
-			ps, err := r.FetchPackages()
+			ps, err := r.FetchPackages(cmd.Context())
 			if err != nil {
 				return errors.Wrap(err, "failed to list packages")
 			}
