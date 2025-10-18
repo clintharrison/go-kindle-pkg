@@ -2,10 +2,9 @@ package list
 
 import (
 	"fmt"
-	"os"
 
+	"github.com/clintharrison/go-kindle-pkg/pkg/cli/clicommon"
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository"
-	repositorytestdata "github.com/clintharrison/go-kindle-pkg/pkg/repository/testdata"
 	"github.com/pingcap/errors"
 	"github.com/spf13/cobra"
 )
@@ -15,27 +14,10 @@ func NewCommand() *cobra.Command {
 		Use:   "list [flags]",
 		Short: "List available packages",
 		RunE: func(cmd *cobra.Command, _ []string) error {
-			repoURLs, err := cmd.Flags().GetStringArray("repo")
+			repo, err := clicommon.GetRepoFromArgs(cmd)
 			if err != nil {
-				// HACK: read the repo URLs from a file instead?
-				repoFile, err := os.CreateTemp("", "gokp-repo-list-*.json")
-				if err != nil {
-					return errors.Wrap(err, "failed to create temp file")
-				}
-				defer os.Remove(repoFile.Name()) //nolint:errcheck
-
-				repoFile.Write(repositorytestdata.RepositoryJSON) //nolint:errcheck
-				repoURLs = []string{"file://%s" + repoFile.Name()}
-				// END HACK
-				// return errors.Wrap(err, "failed to get repo URLs")
+				return err
 			}
-
-			repo, err := repository.NewFromURLs(repoURLs...)
-			if err != nil {
-				return errors.Wrap(err, "failed to create repository from URLs")
-			}
-
-			// network call, eek!
 			packages, err := repo.FetchPackages(cmd.Context())
 			if err != nil {
 				return errors.Wrap(err, "failed to list packages")
@@ -67,7 +49,5 @@ func NewCommand() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.Flags().StringArrayP("repo", "r", []string{}, "Repository URL(s) to use (can be specified multiple times)")
-
 	return cmd
 }

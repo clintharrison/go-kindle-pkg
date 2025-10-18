@@ -8,7 +8,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/clintharrison/go-kindle-pkg/cmd/cli/extract"
+	"github.com/clintharrison/go-kindle-pkg/pkg/cli/extract"
 	"github.com/stretchr/testify/require"
 )
 
