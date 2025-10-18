@@ -1,4 +1,7 @@
 version: "2"
+run:
+  build-tags:
+    - "-gtk2"
 linters:
   default: all
   disable:
