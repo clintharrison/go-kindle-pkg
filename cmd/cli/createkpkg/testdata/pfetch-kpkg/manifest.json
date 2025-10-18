@@ -1,0 +1,20 @@
+{
+    "id": "pfetch",
+    "name": "pfetch",
+    "author": "dylanaraps, packaged by clint32",
+    "description": "A pretty system information tool written in POSIX sh.",
+    "version": [
+        0,
+        6,
+        0
+    ],
+    "dependencies": {
+        "kterm": {
+            "min": [
+                0,
+                0,
+                0
+            ]
+        }
+    }
+}
