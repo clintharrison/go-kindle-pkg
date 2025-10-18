@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"slices"
 
+	"github.com/clintharrison/go-kindle-pkg/pkg/repository"
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
 	"github.com/pingcap/errors"
 )
@@ -63,6 +64,32 @@ func (c *Constraint) String() string {
 type Resolver struct {
 	packages         map[ArtifactID][]*Artifact
 	preferMaxVersion bool
+}
+
+func NewResolverForRepositoryPackages(packages []*repository.PackageArtifact) *Resolver {
+	var res []*Artifact
+	for _, pa := range packages {
+		ds := make([]*Constraint, len(pa.Dependencies))
+		for i, d := range pa.Dependencies {
+			ds[i] = &Constraint{
+				ID:  ArtifactID(d.ID),
+				Min: d.Min,
+				Max: d.Max,
+			}
+			if d.RepositoryID != nil {
+				rid := RepositoryID(*d.RepositoryID)
+				ds[i].RepositoryID = &rid
+			}
+		}
+		ra := &Artifact{
+			ID:           ArtifactID(pa.ID),
+			RepositoryID: RepositoryID(pa.RepositoryID),
+			Version:      pa.Version,
+			Dependencies: ds,
+		}
+		res = append(res, ra)
+	}
+	return NewResolver(res)
 }
 
 func NewResolver(universe []*Artifact) *Resolver {
