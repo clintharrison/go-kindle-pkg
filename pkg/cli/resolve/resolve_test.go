@@ -7,6 +7,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/clintharrison/go-kindle-pkg/pkg/cli/clicommon"
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
 	repositorytestdata "github.com/clintharrison/go-kindle-pkg/pkg/repository/testdata"
 	"github.com/clintharrison/go-kindle-pkg/pkg/resolver"
@@ -103,7 +104,7 @@ func TestParseConstraint(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			c, err := parseConstraint(tt.arg)
+			c, err := clicommon.ParseConstraint(tt.arg)
 			if tt.expectError {
 				require.Error(t, err)
 				return
