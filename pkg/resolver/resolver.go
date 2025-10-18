@@ -114,9 +114,33 @@ func NewResolver(universe []*Artifact) *Resolver {
 	return r
 }
 
-func (r *Resolver) Resolve(constraints []*Constraint) (map[ArtifactID]*Artifact, error) {
+type options struct {
+	fileArtifacts []*Artifact
+}
+
+type optionFunc func(*options)
+
+func WithArtifacts(artifacts []*Artifact) optionFunc {
+	return func(o *options) {
+		o.fileArtifacts = artifacts
+	}
+}
+
+func (r *Resolver) Resolve(constraints []*Constraint, opts ...optionFunc) (map[ArtifactID]*Artifact, error) {
+	options := &options{}
+	for _, opt := range opts {
+		opt(options)
+	}
+
 	// initial empty state
 	resolved := map[ArtifactID]*Artifact{}
+
+	// well, maybe not that empty
+	for _, a := range options.fileArtifacts {
+		// they need to be in the universe (iow, they're not worth special casing in the resolver later)
+		r.packages[a.ID] = append(r.packages[a.ID], a)
+	}
+
 	res, success := r.resolveRecursive(constraints, resolved)
 	if !success {
 		return nil, errors.Errorf("unable to resolve desired packages")
