@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
+	"github.com/clintharrison/go-kindle-pkg/pkg/version"
 )
 
 // PackageArtifact is used to uniquely represent a concrete artifact in dependency resolution.
@@ -114,7 +115,8 @@ func readJSONFromURL(u *url.URL, v interface{}) error {
 			Method: "GET",
 			URL:    u,
 			Header: http.Header{
-				"Accept": []string{"application/json"},
+				"Accept":     []string{"application/json"},
+				"User-Agent": []string{version.FullVersion},
 			},
 		}
 		resp, err := http.DefaultClient.Do(&req)
