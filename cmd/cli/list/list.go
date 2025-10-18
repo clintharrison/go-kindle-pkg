@@ -15,18 +15,21 @@ func NewCommand() *cobra.Command {
 		Use:   "list [flags]",
 		Short: "List available packages",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			// HACK: This should use a real flag or file config
-			f, err := os.CreateTemp("", "gokp-repo-list-*.json")
+			repoURLs, err := cmd.Flags().GetStringArray("repo")
 			if err != nil {
-				return errors.Wrap(err, "failed to create temp file")
+				// HACK: read the repo URLs from a file instead?
+				f, err := os.CreateTemp("", "gokp-repo-list-*.json")
+				if err != nil {
+					return errors.Wrap(err, "failed to create temp file")
+				}
+				defer os.Remove(f.Name())
+				f.Write(repositorytestdata.RepositoryJSON)
+				repoURLs = []string{fmt.Sprintf("file://%s", f.Name())}
+				// END HACK
+				// return errors.Wrap(err, "failed to get repo URLs")
 			}
-			defer os.Remove(f.Name())
-			f.Write(repositorytestdata.RepositoryJSON)
-			// END HACK
 
-			r, err := repository.NewFromURLs(
-				fmt.Sprintf("file://%s", f.Name()),
-			)
+			r, err := repository.NewFromURLs(repoURLs...)
 			if err != nil {
 				return errors.Wrap(err, "failed to create repository from URLs")
 			}
@@ -63,6 +66,7 @@ func NewCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.Flags().StringArrayP("repo", "r", []string{}, "Repository URL(s) to use (can be specified multiple times)")
 
 	return cmd
 }
