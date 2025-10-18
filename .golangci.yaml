@@ -1,9 +1,11 @@
 version: "2"
+run:
+  build-tags:
+    - "-gtk2"
 linters:
   default: all
   disable:
     ### Noisy/false positives:
-    - cyclop
     - depguard
     - funlen
     - gomoddirectives
@@ -19,6 +21,9 @@ linters:
     - err113
     # TODO comments are the bug tracker
     - godox
+    # I've never liked these kinds of rules. Split up a function based on vibes!
+    - cyclop
+    - gocognit
 
     ### These should be eventually fixed:
     - varnamelen
