@@ -1,0 +1,20 @@
+version: "2"
+linters:
+  default: all
+  disable:
+    - wsl
+    - depguard
+    - nlreturn
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+formatters:
+  enable:
+    - gci
+    - gofmt
+    - gofumpt
+    - goimports
+  exclusions:
+    generated: lax
