@@ -1,3 +1,4 @@
+//nolint:tagliatelle // These JSON tags are defined by the manifest format.
 package manifest
 
 type Dependency struct {

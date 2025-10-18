@@ -11,7 +11,17 @@ import (
 	"github.com/pingcap/errors"
 )
 
-var constraintRegexp = regexp.MustCompile(`^(?<package_id>[a-z-.]+)(?:[\s,]*(?:(?:==?\s*(?<eql>[\d.]+))|(?:>=\s*(?<min>[\d.]+))|(?:\<\s*(?<max>[\d.]+)))[\s,]*)*$`)
+var constraintRegexp = regexp.MustCompile(
+	`^(?<package_id>[a-z-.]+)` +
+		`(?:[\s,]*(?:` +
+		// = or ==1.2.3
+		`(?:==?\s*(?<eql>[\d.]+))` +
+		// >=1.2.3
+		`|(?:>=\s*(?<min>[\d.]+))` +
+		// <1.2.3
+		`|(?:\<\s*(?<max>[\d.]+))` +
+		// comma and spaces are allowed between constraints
+		`)[\s,]*)*$`)
 
 // parseConstraint handles a very basic spec for now:
 //
@@ -26,7 +36,7 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 		return nil, fmt.Errorf("unable to parse constraint from arg %q", arg)
 	}
 
-	c := resolver.Constraint{}
+	c := resolver.Constraint{} //nolint:exhaustruct
 	c.ID = resolver.ArtifactID(matches[constraintRegexp.SubexpIndex("package_id")])
 
 	if eql := matches[constraintRegexp.SubexpIndex("eql")]; eql != "" {
@@ -44,16 +54,16 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 		return &c, nil
 	}
 
-	if min := matches[constraintRegexp.SubexpIndex("min")]; min != "" {
-		sv, err := parseVersion(min)
+	if match := matches[constraintRegexp.SubexpIndex("min")]; match != "" {
+		sv, err := parseVersion(match)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse minimum version from arg %q: %w", arg, err)
 		}
 		c.Min = sv
 	}
 
-	if max := matches[constraintRegexp.SubexpIndex("max")]; max != "" {
-		sv, err := parseVersion(max)
+	if match := matches[constraintRegexp.SubexpIndex("max")]; match != "" {
+		sv, err := parseVersion(match)
 		if err != nil {
 			return nil, fmt.Errorf("unable to parse maximum version from arg %q: %w", arg, err)
 		}
@@ -64,7 +74,7 @@ func parseConstraint(arg string) (*resolver.Constraint, error) {
 }
 
 func parseVersion(vstr string) (*manifest.SemanticVersion, error) {
-	sv := &manifest.SemanticVersion{}
+	sv := &manifest.SemanticVersion{} //nolint:exhaustruct
 	// handle 1, 1.0, 1.0.0
 	// split on '.' and parse up to three components
 	parts := strings.Split(vstr, ".")

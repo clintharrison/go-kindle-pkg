@@ -10,8 +10,10 @@ import (
 	"github.com/pingcap/errors"
 )
 
-type ArtifactID string
-type RepositoryID string
+type (
+	ArtifactID   string
+	RepositoryID string
+)
 
 type Artifact struct {
 	ID           ArtifactID
@@ -35,15 +37,15 @@ type Constraint struct {
 	RepositoryID *RepositoryID
 }
 
-// check a version against a constraint (inclusive min, exclusive max)
-func (c *Constraint) Allows(a *Artifact) bool {
-	if c.Min != nil && a.Version.Compare(*c.Min) < 0 {
+// Allows checks whether an artifact matches this constraint.
+func (c *Constraint) Allows(art *Artifact) bool {
+	if c.Min != nil && art.Version.Compare(*c.Min) < 0 {
 		return false
 	}
-	if c.Max != nil && a.Version.Compare(*c.Max) >= 0 {
+	if c.Max != nil && art.Version.Compare(*c.Max) >= 0 {
 		return false
 	}
-	if c.RepositoryID != nil && a.RepositoryID != *c.RepositoryID {
+	if c.RepositoryID != nil && art.RepositoryID != *c.RepositoryID {
 		return false
 	}
 	return true
@@ -71,14 +73,15 @@ func NewResolverForRepositoryPackages(packages []*repository.PackageArtifact) *R
 	for _, pa := range packages {
 		ds := make([]*Constraint, len(pa.Dependencies))
 		for i, d := range pa.Dependencies {
-			ds[i] = &Constraint{
-				ID:  ArtifactID(d.ID),
-				Min: d.Min,
-				Max: d.Max,
-			}
+			var rid *RepositoryID
 			if d.RepositoryID != nil {
-				rid := RepositoryID(*d.RepositoryID)
-				ds[i].RepositoryID = &rid
+				rid = (*RepositoryID)(d.RepositoryID)
+			}
+			ds[i] = &Constraint{
+				ID:           ArtifactID(d.ID),
+				Min:          d.Min,
+				Max:          d.Max,
+				RepositoryID: rid,
 			}
 		}
 		ra := &Artifact{
@@ -122,7 +125,9 @@ func (r *Resolver) Resolve(constraints []*Constraint) (map[ArtifactID]*Artifact,
 
 // resolvedRecursive takes the remaining unresolved constraints and the current resolved map,
 // and attempts to resolve all constraints recursively, returning the final resolved map or an error.
-func (r *Resolver) resolveRecursive(constraints []*Constraint, resolved map[ArtifactID]*Artifact) (map[ArtifactID]*Artifact, bool) {
+func (r *Resolver) resolveRecursive(
+	constraints []*Constraint, resolved map[ArtifactID]*Artifact,
+) (map[ArtifactID]*Artifact, bool) {
 	slog.Debug("resolveRecursive called", "constraints", constraints, "resolved", resolved)
 	if len(constraints) == 0 {
 		// no more constraints :)
@@ -169,7 +174,9 @@ func (r *Resolver) resolveRecursive(constraints []*Constraint, resolved map[Arti
 		resolved[cid] = candidate
 		slog.Debug("tentatively selected candidate", "candidate", candidate, "dependencies", candidate.Dependencies)
 
-		newConstraints := append(constraintsRemaining, candidate.Dependencies...)
+		newConstraints := make([]*Constraint, 0, len(constraintsRemaining)+len(candidate.Dependencies))
+		newConstraints = append(newConstraints, constraintsRemaining...)
+		newConstraints = append(newConstraints, candidate.Dependencies...)
 		res, success := r.resolveRecursive(newConstraints, resolved)
 		if success {
 			return res, true

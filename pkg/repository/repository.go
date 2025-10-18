@@ -11,6 +11,7 @@ import (
 
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
 	"github.com/clintharrison/go-kindle-pkg/pkg/version"
+	"github.com/pingcap/errors"
 )
 
 // PackageArtifact is used to uniquely represent a concrete artifact in dependency resolution.
@@ -35,12 +36,15 @@ type PackageDependency struct {
 	Max *manifest.SemanticVersion
 }
 
-func NewPackageArtifact(packageID string, repo *manifest.RepositoryConfig, pkg *manifest.Package, art *manifest.Artifact) *PackageArtifact {
+func NewPackageArtifact(
+	packageID string, repo *manifest.RepositoryConfig, art *manifest.Artifact,
+) *PackageArtifact {
 	pa := PackageArtifact{
 		ID:            packageID,
 		RepositoryID:  repo.ID,
 		Version:       art.Version,
 		SupportedArch: art.SupportedArch,
+		Dependencies:  nil,
 	}
 
 	deps := []PackageDependency{}
@@ -70,7 +74,7 @@ var _ Repository = (*MultiRepository)(nil)
 
 // NewFromURLs creates a MultiRepository from a list of repository URLs.
 // Repositories must be a valid file:// or http(s):// URL containing a repository manifest JSON file.
-func NewFromURLs(urls ...string) (Repository, error) {
+func NewFromURLs(urls ...string) (*MultiRepository, error) {
 	parsedURLs := make([]*url.URL, len(urls))
 	for i, rawurl := range urls {
 		parsed, err := url.Parse(rawurl)
@@ -82,7 +86,7 @@ func NewFromURLs(urls ...string) (Repository, error) {
 		}
 		parsedURLs[i] = parsed
 	}
-	return &MultiRepository{urls: parsedURLs}, nil
+	return &MultiRepository{urls: parsedURLs, pas: nil}, nil
 }
 
 // FetchPackages fetches each repository and adds their packages to the collection of PackageArtifacts.
@@ -90,46 +94,52 @@ func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*PackageArtifac
 	mr.pas = []*PackageArtifact{}
 	for _, u := range mr.urls {
 		var repoConfig manifest.RepositoryConfig
-		if err := readJSONFromURL(ctx, u, &repoConfig); err != nil {
+		err := readJSONFromURL(ctx, u, &repoConfig)
+		if err != nil {
 			return nil, fmt.Errorf("failed to read repository from %q: %w", u.String(), err)
 		}
 
 		for id, pkg := range repoConfig.Packages {
 			for _, art := range pkg.Artifacts {
-				mr.pas = append(mr.pas, NewPackageArtifact(id, &repoConfig, &pkg, &art))
+				mr.pas = append(mr.pas, NewPackageArtifact(id, &repoConfig, &art))
 			}
 		}
 	}
 	return mr.pas, nil
 }
 
-func readJSONFromURL(ctx context.Context, u *url.URL, v interface{}) error {
+func readJSONFromURL(ctx context.Context, url *url.URL, out interface{}) error {
 	var r io.Reader
-	switch u.Scheme {
+	switch url.Scheme {
 	case "http", "https":
 		// TODO: use retryablehttp?
-		req, err := http.NewRequestWithContext(ctx, "GET", u.String(), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, url.String(), nil)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "http.NewRequestWithContext(%q)", url.String())
 		}
 		req.Header.Set("Accept", "application/json")
 		req.Header.Set("User-Agent", version.FullVersion)
+
 		resp, err := http.DefaultClient.Do(req)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "http.Get(%q)", url.String())
 		}
-		defer resp.Body.Close()
+		defer func() { _ = resp.Body.Close() }()
 		r = resp.Body
 	case "file":
-		f, err := os.Open(u.Path)
+		f, err := os.Open(url.Path)
 		if err != nil {
-			return err
+			return errors.Wrapf(err, "os.Open(%q)", url.Path)
 		}
 		defer f.Close()
 		r = f
 	default:
-		return fmt.Errorf("unsupported URL scheme: %s", u.Scheme)
+		return fmt.Errorf("unsupported URL scheme: %s", url.Scheme)
 	}
 
-	return json.NewDecoder(r).Decode(v)
+	err := json.NewDecoder(r).Decode(out)
+	if err != nil {
+		return errors.Wrapf(err, "failed to decode JSON from %s", url.String())
+	}
+	return nil
 }

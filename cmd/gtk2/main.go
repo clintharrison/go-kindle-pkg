@@ -30,7 +30,7 @@ type AppState struct {
 }
 
 func do() error {
-	s := AppState{}
+	s := AppState{} //nolint:exhaustruct
 	f, err := os.Open("/tmp/repo.json")
 	if err != nil {
 		return errors.Wrapf(err, "os.Open(%q)", "/tmp/repo.json")
@@ -48,7 +48,7 @@ func do() error {
 	gtk.Init(&os.Args)
 	window := gtk.NewWindow(gtk.WINDOW_TOPLEVEL)
 	window.SetTitle("L:A_N:application_ID:org.kindlemodding.example-gtk-application_PC:T")
-	window.Connect("destroy", func(ctx *glib.CallbackContext) {
+	window.Connect("destroy", func(_ *glib.CallbackContext) {
 		fmt.Println("goodbye!")
 		gtk.MainQuit()
 	})
@@ -75,23 +75,24 @@ func do() error {
 
 	vboxButtons := gtk.NewVBox(true, 0)
 	quitButton := gtk.NewButtonWithLabel("Quit")
-	quitButton.Connect("clicked", func(ctx *glib.CallbackContext) {
+	quitButton.Connect("clicked", func(_ *glib.CallbackContext) {
 		gtk.MainQuit()
 	})
 	vboxButtons.Add(quitButton)
 	previewButton := gtk.NewButtonWithLabel("Preview")
-	previewButton.Connect("clicked", func(ctx *glib.CallbackContext) {
+	previewButton.Connect("clicked", func(_ *glib.CallbackContext) {
 		slog.Info("preview clicked")
 	})
 	vboxButtons.Add(previewButton)
 	installButton := gtk.NewButtonWithLabel("Install")
-	installButton.Connect("clicked", func(ctx *glib.CallbackContext) {
+	installButton.Connect("clicked", func(_ *glib.CallbackContext) {
 		slog.Info("install clicked")
 	})
 	vboxButtons.Add(installButton)
-	vboxButtons.SetChildPacking(quitButton, true, true, 5, gtk.PACK_START)
-	vboxButtons.SetChildPacking(previewButton, true, true, 5, gtk.PACK_START)
-	vboxButtons.SetChildPacking(installButton, true, true, 5, gtk.PACK_START)
+	padding := uint(5) //nolint:mnd
+	vboxButtons.SetChildPacking(quitButton, true, true, padding, gtk.PACK_START)
+	vboxButtons.SetChildPacking(previewButton, true, true, padding, gtk.PACK_START)
+	vboxButtons.SetChildPacking(installButton, true, true, padding, gtk.PACK_START)
 	vbox.Add(vboxButtons)
 
 	vbox.SetChildPacking(listView, true, true, 0, gtk.PACK_START)
@@ -105,7 +106,8 @@ func do() error {
 }
 
 func main() {
-	if err := do(); err != nil {
+	err := do()
+	if err != nil {
 		// fmt.Fprintln(os.Stderr, "Error:", err)
 		os.Exit(1)
 	}

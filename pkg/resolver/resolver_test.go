@@ -12,30 +12,38 @@ func mkSV(major, minor, patch int) manifest.SemanticVersion {
 }
 
 func mkC(id string) *Constraint {
-	return &Constraint{ID: ArtifactID(id)}
+	return &Constraint{ID: ArtifactID(id), RepositoryID: nil, Min: nil, Max: nil}
 }
 
 func mkMinC(id string, major, minor, patch int) *Constraint {
 	sv := mkSV(major, minor, patch)
-	return &Constraint{ID: ArtifactID(id), Min: &sv}
+	return &Constraint{ID: ArtifactID(id), RepositoryID: nil, Min: &sv, Max: nil}
 }
 
-func mkMaxC(id string, major, minor, patch int) *Constraint {
+func mkMaxC(id string, major, minor, patch int) *Constraint { //nolint:unparam
 	sv := mkSV(major, minor, patch)
-	return &Constraint{ID: ArtifactID(id), Max: &sv}
+	return &Constraint{ID: ArtifactID(id), RepositoryID: nil, Min: nil, Max: &sv}
 }
 
-func mkMinMaxC(id string, minMajor, minMinor, minPatch int, maxMajor, maxMinor, maxPatch int) *Constraint {
+func mkMinMaxC(
+	id string, minMajor, minMinor, minPatch int, maxMajor, maxMinor, maxPatch int, //nolint:unparam
+) *Constraint {
 	minSV := mkSV(minMajor, minMinor, minPatch)
 	maxSV := mkSV(maxMajor, maxMinor, maxPatch)
-	return &Constraint{ID: ArtifactID(id), Min: &minSV, Max: &maxSV}
+	return &Constraint{ID: ArtifactID(id), RepositoryID: nil, Min: &minSV, Max: &maxSV}
 }
 
 func mkPkgA(id string, major, minor, patch int, deps ...*Constraint) *Artifact {
-	return &Artifact{ID: ArtifactID(id), Version: mkSV(major, minor, patch), Dependencies: deps}
+	return &Artifact{
+		ID:           ArtifactID(id),
+		RepositoryID: "",
+		Version:      mkSV(major, minor, patch),
+		Dependencies: deps,
+	}
 }
 
 func TestResolver(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name string
 		// input
@@ -185,6 +193,7 @@ func TestResolver(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			r := NewResolver(tt.universe)
 			result, err := r.Resolve(tt.desiredPackages)
 			if (err != nil) != tt.expectError {
@@ -197,15 +206,19 @@ func TestResolver(t *testing.T) {
 			expectedList := []Artifact{}
 			for _, a := range tt.expected {
 				expectedList = append(expectedList, Artifact{
-					ID:      a.ID,
-					Version: a.Version,
+					ID:           a.ID,
+					Version:      a.Version,
+					RepositoryID: "",
+					Dependencies: nil,
 				})
 			}
 			resultList := []Artifact{}
 			for _, a := range result {
 				resultList = append(resultList, Artifact{
-					ID:      a.ID,
-					Version: a.Version,
+					ID:           a.ID,
+					Version:      a.Version,
+					RepositoryID: "",
+					Dependencies: nil,
 				})
 			}
 			require.ElementsMatch(t, expectedList, resultList, "Expected %v, got %v", expectedList, resultList)

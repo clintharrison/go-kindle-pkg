@@ -28,7 +28,7 @@ type KPKG struct {
 }
 
 func Open(path string) (*KPKG, error) {
-	kpkg := &KPKG{}
+	kpkg := &KPKG{} //nolint:exhaustruct // this is initialized as we go, to register closers
 
 	f, err := os.Open(path)
 	if err != nil {
@@ -38,9 +38,11 @@ func Open(path string) (*KPKG, error) {
 	kpkg.file = f
 
 	var r io.Reader
-	if r, err = xz.NewReader(f); err != nil {
+	r, err = xz.NewReader(f)
+	if err != nil {
 		slog.Debug("not xz compressed, trying gzip", "error", err)
-		if r, err = gzip.NewReader(f); err != nil {
+		r, err = gzip.NewReader(f)
+		if err != nil {
 			slog.Debug("not gzip compressed, using raw file", "error", err)
 			r = f
 		}
@@ -84,12 +86,12 @@ func (k *KPKG) ReadMetadata() error {
 			data := make([]byte, entry.Size)
 			_, err := io.ReadFull(k.tarReader, data)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "io.ReadFull() for manifest.json")
 			}
 			var m manifest.Package
 			err = json.Unmarshal(data, &m)
 			if err != nil {
-				return err
+				return errors.Wrapf(err, "json.Unmarshal() to manifest.Package")
 			}
 			k.Manifest = &m
 			return nil
@@ -108,7 +110,8 @@ func (k *KPKG) Close() error {
 	defer k.mu.Unlock()
 	var err error
 	for _, closer := range k.closerFuncs {
-		if cerr := closer(); cerr != nil {
+		cerr := closer()
+		if cerr != nil {
 			err = cerr
 		}
 	}

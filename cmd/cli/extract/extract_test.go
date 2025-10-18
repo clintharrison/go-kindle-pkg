@@ -1,4 +1,4 @@
-package extract
+package extract_test
 
 import (
 	"bytes"
@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/clintharrison/go-kindle-pkg/cmd/cli/extract"
 	"github.com/stretchr/testify/require"
 )
 
@@ -21,6 +22,8 @@ install.sh type=file mode=755 size=39 uid=1000 gid=100
 uninstall.sh type=file mode=755 size=43 uid=1000 gid=100`
 
 func TestExtractCmd_TestArchive(t *testing.T) {
+	t.Parallel()
+
 	downloads := t.TempDir()
 
 	koreaderPath := path.Join(downloads, "koreader_1.2.0_armhf.kpkg")
@@ -30,7 +33,7 @@ func TestExtractCmd_TestArchive(t *testing.T) {
 	require.NoError(t, err)
 	f.Close()
 
-	cmd := NewCommand()
+	cmd := extract.NewCommand()
 
 	out := new(bytes.Buffer)
 	cmd.SetOut(out)
@@ -58,6 +61,8 @@ func TestExtractCmd_TestArchive(t *testing.T) {
 }
 
 func TestExtractCmd_ExtractArchive(t *testing.T) {
+	t.Parallel()
+
 	downloads := t.TempDir()
 
 	pkgsPath := path.Join(downloads, "pkgs")
@@ -68,7 +73,7 @@ func TestExtractCmd_ExtractArchive(t *testing.T) {
 	require.NoError(t, err)
 	f.Close()
 
-	cmd := NewCommand()
+	cmd := extract.NewCommand()
 
 	out := new(bytes.Buffer)
 	cmd.SetOut(out)
@@ -86,7 +91,7 @@ func TestExtractCmd_ExtractArchive(t *testing.T) {
 	require.NotEmpty(t, files, "expected extracted files to exist in output directory")
 
 	// lazy way to make sure everything got extracted
-	var extractedFiles []string
+	extractedFiles := make([]string, 0, len(files))
 	for _, file := range files {
 		extractedFiles = append(extractedFiles, file.Name())
 	}
@@ -100,7 +105,7 @@ func TestExtractCmd_ExtractArchive(t *testing.T) {
 	require.NoError(t, err, "expected to be able to read extracted app directory")
 	require.NotEmpty(t, files, "expected extracted files to exist in app directory")
 
-	var appFiles []string
+	appFiles := make([]string, 0, len(files))
 	for _, file := range files {
 		appFiles = append(appFiles, file.Name())
 	}

@@ -25,14 +25,17 @@ func initLogger() {
 }
 
 func main() {
-	ctx := context.Background()
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
-	defer cancel()
+	err := func() error {
+		ctx := context.Background()
+		ctx, cancel := signal.NotifyContext(ctx, os.Interrupt, os.Kill)
+		defer cancel()
 
-	initLogger()
+		initLogger()
 
-	rootCmd := NewRootCmd()
-	if err := rootCmd.ExecuteContext(ctx); err != nil {
+		rootCmd := NewRootCmd()
+		return rootCmd.ExecuteContext(ctx)
+	}()
+	if err != nil {
 		os.Exit(1)
 	}
 

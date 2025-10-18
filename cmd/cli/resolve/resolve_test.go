@@ -33,7 +33,9 @@ func mkSV(major, minor, patch int) manifest.SemanticVersion {
 
 func mkPtr[T any](t T) *T { return &t }
 
+//nolint:exhaustruct
 func TestParseConstraint(t *testing.T) {
+	t.Parallel()
 	tests := []struct {
 		name        string
 		arg         string
@@ -99,6 +101,8 @@ func TestParseConstraint(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
 			c, err := parseConstraint(tt.arg)
 			if tt.expectError {
 				require.Error(t, err)
@@ -122,9 +126,11 @@ func TestParseConstraint(t *testing.T) {
 }
 
 func TestResolveE2E_File(t *testing.T) {
+	t.Parallel()
+
 	tmpdir := t.TempDir()
 	reposJSONPath := tmpdir + "/repo.json"
-	err := os.WriteFile(reposJSONPath, repositorytestdata.RepositoryJSON, 0644)
+	err := os.WriteFile(reposJSONPath, repositorytestdata.RepositoryJSON, 0o644) //nolint:gosec
 	require.NoError(t, err)
 
 	cmd := NewCommand()
@@ -147,6 +153,7 @@ func TestResolveE2E_File(t *testing.T) {
 }
 
 func TestResolveE2E_HTTP(t *testing.T) {
+	t.Parallel()
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path != "/repository.json" {
 			t.Errorf("Expected to request \"/repository.json\", got: %q", r.URL.Path)
@@ -155,7 +162,7 @@ func TestResolveE2E_HTTP(t *testing.T) {
 			t.Errorf("Expected \"Accept: application/json\" header, got: %q", r.Header.Get("Accept"))
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write(repositorytestdata.RepositoryJSON)
+		w.Write(repositorytestdata.RepositoryJSON) //nolint:errcheck
 	}))
 	defer server.Close()
 

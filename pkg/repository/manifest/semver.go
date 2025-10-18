@@ -3,6 +3,8 @@ package manifest
 import (
 	"encoding/json"
 	"fmt"
+
+	"github.com/pingcap/errors"
 )
 
 type SemanticVersion struct {
@@ -11,7 +13,7 @@ type SemanticVersion struct {
 	Patch int
 }
 
-func (sv SemanticVersion) Compare(other SemanticVersion) int {
+func (sv *SemanticVersion) Compare(other SemanticVersion) int {
 	if sv.Major != other.Major {
 		return sv.Major - other.Major
 	}
@@ -23,9 +25,12 @@ func (sv SemanticVersion) Compare(other SemanticVersion) int {
 
 func (sv *SemanticVersion) UnmarshalJSON(data []byte) error {
 	var vs []int
-	json.Unmarshal(data, &vs)
+	err := json.Unmarshal(data, &vs)
+	if err != nil {
+		return errors.AddStack(err)
+	}
 	if len(vs) != 3 {
-		return fmt.Errorf("semver expected to be [major, minor, patch]")
+		return errors.New("semver expected to be [major, minor, patch]")
 	}
 	sv.Major = vs[0]
 	sv.Minor = vs[1]
@@ -33,6 +38,6 @@ func (sv *SemanticVersion) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-func (sv SemanticVersion) String() string {
+func (sv *SemanticVersion) String() string {
 	return fmt.Sprintf("%d.%d.%d", sv.Major, sv.Minor, sv.Patch)
 }

@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"os"
 	"path"
+	"strconv"
 	"strings"
 
 	"github.com/pingcap/errors"
@@ -15,13 +16,14 @@ import (
 
 func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, w io.Writer) error {
 	if targetDir == "" {
-		return fmt.Errorf("no target directory specified")
+		return errors.New("no target directory specified")
 	}
-	if _, err := os.Stat(targetDir); err != nil {
+	_, err := os.Stat(targetDir)
+	if err != nil {
 		if test {
 			slog.Info("would create output directory", "path", targetDir)
 		} else {
-			err := os.MkdirAll(targetDir, 0o755)
+			err := os.MkdirAll(targetDir, 0o755) //nolint:gosec
 			if err != nil {
 				return errors.Wrapf(err, "os.MkdirAll(%q)", targetDir)
 			}
@@ -33,7 +35,7 @@ func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, w io
 			break
 		}
 		if err != nil {
-			return err
+			return errors.Wrap(err, "tarReader.Next()")
 		}
 		slog.Debug("extracting", "name", entry.Name, "type", entry.Typeflag, "size", entry.Size)
 		if test {
@@ -52,8 +54,8 @@ func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, w io
 	return nil
 }
 
-// this is a slightly nicer-to-read order than random
-var attrOrder = []string{
+// attrOrder matches the order from mtree output, which is slightly nicer to read than random.
+var attrOrder = []string{ //nolint:gochecknoglobals
 	"type", "mode", "size", "uid", "gid", "link",
 }
 
@@ -65,13 +67,13 @@ func logEntry(w io.Writer, entry *tar.Header) error {
 	for _, r := range []rune{'\t', '\n', '\v', '\f', '\r'} {
 		n = strings.ReplaceAll(n, string(r), fmt.Sprintf("\\%o", r))
 	}
-	w.Write([]byte(n))
+	w.Write([]byte(n)) //nolint:errcheck
 
 	attrs := make(map[string]string)
-	attrs["size"] = fmt.Sprintf("%d", entry.Size)
+	attrs["size"] = strconv.FormatInt(entry.Size, 10)
 	attrs["mode"] = fmt.Sprintf("%o", entry.Mode)
-	attrs["uid"] = fmt.Sprintf("%d", entry.Uid)
-	attrs["gid"] = fmt.Sprintf("%d", entry.Gid)
+	attrs["uid"] = strconv.Itoa(entry.Uid)
+	attrs["gid"] = strconv.Itoa(entry.Gid)
 
 	switch entry.Typeflag {
 	case tar.TypeDir:
@@ -97,28 +99,28 @@ func logEntry(w io.Writer, entry *tar.Header) error {
 	for _, k := range attrOrder {
 		v, ok := attrs[k]
 		if ok {
-			w.Write([]byte(fmt.Sprintf(" %s=%s", k, v)))
+			fmt.Fprintf(w, " %s=%s", k, v) //nolint:errcheck
 		}
 	}
-	w.Write([]byte("\n"))
+	w.Write([]byte("\n")) //nolint:errcheck
 	return nil
 }
 
-func extractEntry(ctx context.Context, w io.Writer, r io.Reader, entry *tar.Header, targetDir string) error {
-	logEntry(w, entry)
+func extractEntry(_ context.Context, w io.Writer, r io.Reader, entry *tar.Header, targetDir string) error {
+	_ = logEntry(w, entry)
 
 	path := strings.TrimPrefix(path.Clean(entry.Name), "./")
 	fullPath := targetDir + "/" + path
 
 	switch entry.Typeflag {
 	case tar.TypeDir:
-		err := os.MkdirAll(fullPath, os.FileMode(entry.Mode))
+		err := os.MkdirAll(fullPath, os.FileMode(entry.Mode)) //nolint:gosec
 		if err != nil {
 			return errors.Wrapf(err, "os.MkdirAll(%q)", fullPath)
 		}
 		return nil
 	case tar.TypeReg:
-		file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(entry.Mode))
+		file, err := os.OpenFile(fullPath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(entry.Mode)) //nolint:gosec
 		if err != nil {
 			return errors.Wrapf(err, "os.OpenFile(%q)", fullPath)
 		}

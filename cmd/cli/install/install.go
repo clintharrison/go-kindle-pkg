@@ -9,7 +9,7 @@ func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install [flags] example.kpkg",
 		Short: "Extract and install a .kpkg file",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return errors.Errorf("not implemented")
 		},
 	}

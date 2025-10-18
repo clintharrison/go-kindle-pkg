@@ -18,23 +18,28 @@ func NewCommand() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "failed to get repo URLs")
 			}
-			cmd.OutOrStdout().Write([]byte("Using packages from repositories:\n"))
+			fmt.Fprint(cmd.OutOrStdout(), "Using packages from repositories:\n") //nolint:errcheck
 			for _, u := range repoURLs {
-				cmd.OutOrStdout().Write([]byte("  - " + u + "\n"))
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", u) //nolint:errcheck
 			}
 
 			repo, err := repository.NewFromURLs(repoURLs...)
 			if err != nil {
-				cmd.OutOrStderr().Write([]byte(fmt.Sprintf("ERROR: Unable to create repositories:\n%v\n", err)))
+				fmt.Fprintf(cmd.OutOrStderr(), //nolint:errcheck
+					"ERROR: Unable to create repositories:\n%v\n",
+					err)
 				return errors.Wrap(err, "failed to create repository from URLs")
 			}
 
 			packages, err := repo.FetchPackages(cmd.Context())
 			if err != nil {
-				cmd.OutOrStderr().Write([]byte(fmt.Sprintf("ERROR: Unable to fetch packages from repositories:\n%v\n", err)))
+				fmt.Fprintf( //nolint:errcheck
+					cmd.OutOrStderr(),
+					"ERROR: Unable to fetch packages from repositories:\n%v\n",
+					err)
 				return errors.Wrap(err, "failed to fetch packages from repositories")
 			}
-			cmd.OutOrStdout().Write([]byte(fmt.Sprintf("Loaded %d package\n", len(packages))))
+			fmt.Fprintf(cmd.OutOrStdout(), "Loaded %d package\n", len(packages)) //nolint:errcheck
 
 			r := resolver.NewResolverForRepositoryPackages(packages)
 
@@ -46,13 +51,13 @@ func NewCommand() *cobra.Command {
 
 			result, err := r.Resolve(constraints)
 			if err != nil {
-				cmd.OutOrStderr().Write([]byte(fmt.Sprintf("ERROR: Unable to resolve packages:\n%v\n", err)))
+				fmt.Fprintf(cmd.OutOrStderr(), "ERROR: Unable to resolve packages:\n%v\n", err) //nolint:errcheck
 				return errors.Wrap(err, "failed to resolve packages")
 			}
 
-			cmd.OutOrStdout().Write([]byte("Resolved packages:\n"))
+			cmd.OutOrStdout().Write([]byte("Resolved packages:\n")) //nolint:errcheck
 			for _, art := range result {
-				cmd.OutOrStdout().Write([]byte(fmt.Sprintf("  - %s\n", art)))
+				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", art) //nolint:errcheck
 			}
 
 			return nil

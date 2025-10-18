@@ -6,7 +6,6 @@ import (
 	"github.com/clintharrison/go-kindle-pkg/cmd/cli/list"
 	"github.com/clintharrison/go-kindle-pkg/cmd/cli/resolve"
 	"github.com/clintharrison/go-kindle-pkg/pkg/version"
-
 	"github.com/spf13/cobra"
 )
 
