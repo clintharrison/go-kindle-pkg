@@ -64,18 +64,42 @@ type Repository interface {
 	FetchPackages(ctx context.Context) ([]*PackageArtifact, error)
 }
 
+type HTTPRepository struct {
+	url *url.URL
+	pas []*PackageArtifact
+}
+
+func (mr *HTTPRepository) FetchPackages(ctx context.Context) ([]*PackageArtifact, error) {
+	mr.pas = []*PackageArtifact{}
+	var repoConfig manifest.RepositoryConfig
+	err := readJSONFromURL(ctx, mr.url, &repoConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read repository from %q: %w", mr.url.String(), err)
+	}
+
+	for id, pkg := range repoConfig.Packages {
+		for _, art := range pkg.Artifacts {
+			mr.pas = append(mr.pas, NewPackageArtifact(id, &repoConfig, &art))
+		}
+	}
+	return mr.pas, nil
+}
+
 type MultiRepository struct {
-	urls []*url.URL
+	repos []Repository
 
 	pas []*PackageArtifact
 }
 
-var _ Repository = (*MultiRepository)(nil)
+var (
+	_ Repository = (*HTTPRepository)(nil)
+	_ Repository = (*MultiRepository)(nil)
+)
 
 // NewFromURLs creates a MultiRepository from a list of repository URLs.
 // Repositories must be a valid file:// or http(s):// URL containing a repository manifest JSON file.
 func NewFromURLs(urls ...string) (*MultiRepository, error) {
-	parsedURLs := make([]*url.URL, len(urls))
+	repos := make([]Repository, len(urls))
 	for i, rawurl := range urls {
 		parsed, err := url.Parse(rawurl)
 		if err != nil {
@@ -84,26 +108,20 @@ func NewFromURLs(urls ...string) (*MultiRepository, error) {
 		if parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "file" {
 			return nil, fmt.Errorf("invalid URL scheme %q in repo %q", parsed.Scheme, rawurl)
 		}
-		parsedURLs[i] = parsed
+		repos[i] = &HTTPRepository{url: parsed}
 	}
-	return &MultiRepository{urls: parsedURLs, pas: nil}, nil
+	return &MultiRepository{repos: repos, pas: nil}, nil
 }
 
 // FetchPackages fetches each repository and adds their packages to the collection of PackageArtifacts.
 func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*PackageArtifact, error) {
 	mr.pas = []*PackageArtifact{}
-	for _, u := range mr.urls {
-		var repoConfig manifest.RepositoryConfig
-		err := readJSONFromURL(ctx, u, &repoConfig)
+	for _, repo := range mr.repos {
+		pas, err := repo.FetchPackages(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("failed to read repository from %q: %w", u.String(), err)
+			return nil, err
 		}
-
-		for id, pkg := range repoConfig.Packages {
-			for _, art := range pkg.Artifacts {
-				mr.pas = append(mr.pas, NewPackageArtifact(id, &repoConfig, &art))
-			}
-		}
+		mr.pas = append(mr.pas, pas...)
 	}
 	return mr.pas, nil
 }
