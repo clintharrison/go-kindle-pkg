@@ -118,16 +118,18 @@ type options struct {
 	fileArtifacts []*Artifact
 }
 
-type optionFunc func(*options)
+type OptionFunc func(*options)
 
-func WithArtifacts(artifacts []*Artifact) optionFunc {
+func WithArtifacts(artifacts []*Artifact) OptionFunc {
 	return func(o *options) {
 		o.fileArtifacts = artifacts
 	}
 }
 
-func (r *Resolver) Resolve(constraints []*Constraint, opts ...optionFunc) (map[ArtifactID]*Artifact, error) {
-	options := &options{}
+func (r *Resolver) Resolve(constraints []*Constraint, opts ...OptionFunc) (map[ArtifactID]*Artifact, error) {
+	options := &options{
+		fileArtifacts: []*Artifact{},
+	}
 	for _, opt := range opts {
 		opt(options)
 	}

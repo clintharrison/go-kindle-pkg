@@ -108,7 +108,7 @@ func NewFromURLs(urls ...string) (*MultiRepository, error) {
 		if parsed.Scheme != "http" && parsed.Scheme != "https" && parsed.Scheme != "file" {
 			return nil, fmt.Errorf("invalid URL scheme %q in repo %q", parsed.Scheme, rawurl)
 		}
-		repos[i] = &HTTPRepository{url: parsed}
+		repos[i] = &HTTPRepository{url: parsed, pas: nil}
 	}
 	return &MultiRepository{repos: repos, pas: nil}, nil
 }
@@ -119,7 +119,7 @@ func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*PackageArtifac
 	for _, repo := range mr.repos {
 		pas, err := repo.FetchPackages(ctx)
 		if err != nil {
-			return nil, err
+			return nil, errors.AddStack(err)
 		}
 		mr.pas = append(mr.pas, pas...)
 	}

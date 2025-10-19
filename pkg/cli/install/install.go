@@ -67,7 +67,7 @@ func processKPKGArgs(fileArgs []string) ([]*resolver.Constraint, []*resolver.Art
 		if err != nil {
 			return nil, nil, errors.Wrapf(err, "kpkg.OpenKPKGFile(%q)", f)
 		}
-		defer kpkg.Close()
+		defer kpkg.Close() //nolint:errcheck
 		pkgManifest := kpkg.Manifest
 		if pkgManifest == nil {
 			return nil, nil, fmt.Errorf("kpkg %q has no manifest", f)
@@ -106,7 +106,9 @@ func processKPKGArgs(fileArgs []string) ([]*resolver.Constraint, []*resolver.Art
 }
 
 // findFileArgs separates .kpkg file arguments from version constraint (foo=1.2.3) arguments.
-func findFileArgs(args []string) (fileArgs []string, rest []string, err error) {
+func findFileArgs(args []string) ([]string, []string, error) {
+	var fileArgs []string
+	var rest []string
 	for _, arg := range args {
 		fi, _ := os.Stat(arg)
 		exists := fi != nil && fi.Mode().IsRegular()
@@ -130,24 +132,26 @@ func findFileArgs(args []string) (fileArgs []string, rest []string, err error) {
 func constraintsFromKPKGFiles(manifests []*manifest.Manifest) ([]*resolver.Constraint, error) {
 	var constraints []*resolver.Constraint
 	for _, pkgManifest := range manifests {
-		cs, err := func() ([]*resolver.Constraint, error) {
+		cs, err := func() ([]*resolver.Constraint, error) { //nolint:unparam
 			maxC := manifest.SemanticVersion{
 				Major: pkgManifest.Version.Major,
 				Minor: pkgManifest.Version.Minor,
 				Patch: pkgManifest.Version.Patch + 1,
 			}
 			constraint := &resolver.Constraint{
-				ID:  resolver.ArtifactID(pkgManifest.ID),
-				Min: &pkgManifest.Version,
-				Max: &maxC,
+				ID:           resolver.ArtifactID(pkgManifest.ID),
+				RepositoryID: nil,
+				Min:          &pkgManifest.Version,
+				Max:          &maxC,
 			}
 
 			cs := []*resolver.Constraint{constraint}
 			for depID, dep := range pkgManifest.Dependencies {
 				cs = append(cs, &resolver.Constraint{
-					ID:  resolver.ArtifactID(depID),
-					Min: dep.Min,
-					Max: dep.Max,
+					ID:           resolver.ArtifactID(depID),
+					RepositoryID: nil,
+					Min:          dep.Min,
+					Max:          dep.Max,
 				})
 			}
 			return cs, nil

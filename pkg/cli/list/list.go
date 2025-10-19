@@ -16,7 +16,7 @@ func NewCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			repo, err := clicommon.GetRepoFromArgs(cmd)
 			if err != nil {
-				return err
+				return errors.Wrap(err, "failed to initialize package repository")
 			}
 			packages, err := repo.FetchPackages(cmd.Context())
 			if err != nil {
