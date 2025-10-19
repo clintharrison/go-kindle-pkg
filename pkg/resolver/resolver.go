@@ -69,7 +69,7 @@ type Resolver struct {
 	preferMaxVersion bool
 }
 
-func NewResolverForRepositoryPackages(packages []*repository.PackageArtifact) *Resolver {
+func NewResolverForRepositoryPackages(packages []*repository.RepoPackage) *Resolver {
 	var res []*Artifact
 	for _, pa := range packages {
 		ds := make([]*Constraint, len(pa.Dependencies))
@@ -216,4 +216,28 @@ func (r *Resolver) resolveRecursive(
 
 	// no candidates were successful
 	return nil, false
+}
+
+func DiffInstallations(current, desired map[ArtifactID]*Artifact) ([]*Artifact, []*Artifact) {
+	var add []*Artifact
+	var rm []*Artifact
+
+	for id, dart := range desired {
+		if cart, ok := current[id]; ok {
+			if cart.Version.Compare(dart.Version) != 0 {
+				add = append(add, dart)
+				rm = append(rm, cart)
+			}
+		} else {
+			add = append(add, dart)
+		}
+	}
+
+	for id, art := range current {
+		if _, ok := desired[id]; !ok {
+			rm = append(rm, art)
+		}
+	}
+
+	return add, rm
 }

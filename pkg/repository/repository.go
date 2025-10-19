@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"net/url"
 	"os"
@@ -14,15 +15,17 @@ import (
 	"github.com/pingcap/errors"
 )
 
-// PackageArtifact is used to uniquely represent a concrete artifact in dependency resolution.
-// It does not need to fully duplicate all user-facing metadata or package URLs, just enough
-// to construct the dependency graph.
-type PackageArtifact struct {
+// RepoPackage is a specific version of a package from a repository.
+type RepoPackage struct {
 	ID            string
 	RepositoryID  string
 	Version       manifest.SemanticVersion
 	SupportedArch []string
 	Dependencies  []PackageDependency
+}
+
+func (rp *RepoPackage) String() string {
+	return fmt.Sprintf("%s-%s (repo: %s)", rp.ID, rp.Version.String(), rp.RepositoryID)
 }
 
 // PackageDependency represents a constraint on a dependent package.
@@ -36,10 +39,10 @@ type PackageDependency struct {
 	Max *manifest.SemanticVersion
 }
 
-func NewPackageArtifact(
+func NewRepoPackage(
 	packageID string, repo *manifest.RepositoryConfig, art *manifest.Artifact,
-) *PackageArtifact {
-	pa := PackageArtifact{
+) *RepoPackage {
+	pa := RepoPackage{
 		ID:            packageID,
 		RepositoryID:  repo.ID,
 		Version:       art.Version,
@@ -61,34 +64,94 @@ func NewPackageArtifact(
 }
 
 type Repository interface {
-	FetchPackages(ctx context.Context) ([]*PackageArtifact, error)
+	ID() string
+	FetchPackages(ctx context.Context) ([]*RepoPackage, error)
+	DownloadPackage(ctx context.Context, repoPackage *RepoPackage, destPath string, dryRun bool) error
 }
 
 type HTTPRepository struct {
-	url *url.URL
-	pas []*PackageArtifact
+	url        *url.URL
+	pas        []*RepoPackage
+	repoConfig *manifest.RepositoryConfig
 }
 
-func (mr *HTTPRepository) FetchPackages(ctx context.Context) ([]*PackageArtifact, error) {
-	mr.pas = []*PackageArtifact{}
+func (mr *HTTPRepository) ID() string {
+	return mr.repoConfig.ID
+}
+
+func (mr *HTTPRepository) FetchPackages(ctx context.Context) ([]*RepoPackage, error) {
+	mr.pas = []*RepoPackage{}
 	var repoConfig manifest.RepositoryConfig
 	err := readJSONFromURL(ctx, mr.url, &repoConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read repository from %q: %w", mr.url.String(), err)
 	}
+	mr.repoConfig = &repoConfig
 
 	for id, pkg := range repoConfig.Packages {
 		for _, art := range pkg.Artifacts {
-			mr.pas = append(mr.pas, NewPackageArtifact(id, &repoConfig, &art))
+			mr.pas = append(mr.pas, NewRepoPackage(id, &repoConfig, &art))
 		}
 	}
 	return mr.pas, nil
 }
 
+func (mr *HTTPRepository) DownloadPackage(
+	ctx context.Context, pkg *RepoPackage, destPath string, dryRun bool,
+) error {
+	slog.Debug("HTTPRepository.DownloadPackage()", "package", pkg.ID, "version", pkg.Version.String(), "repo_id", pkg.RepositoryID, mr.repoConfig.ID)
+	if pkg.RepositoryID != mr.repoConfig.ID {
+		return fmt.Errorf("package %s does not belong to repository %s",
+			pkg.ID, mr.repoConfig.ID)
+	}
+
+	art := mr.findArtifact(pkg.ID, pkg.Version)
+	slog.Debug("HTTPRepository.DownloadPackage()",
+		"package", pkg.ID, "version", pkg.Version.String(), "artifact", art)
+
+	if dryRun {
+		fmt.Printf("  [dry run] Downloading package %s version %s from %s to %s [artifact=%s]\n",
+			pkg.ID, pkg.Version.String(), mr.url.String(), destPath, art.URL)
+		return nil
+	}
+
+	resp, err := http.Get(art.URL)
+	if err != nil {
+		return errors.Wrapf(err, "http.Get(%q)", art.URL)
+	}
+	defer resp.Body.Close() //nolint:errcheck
+
+	outFile, err := os.Create(destPath)
+	if err != nil {
+		return errors.Wrapf(err, "os.Create(%q)", destPath)
+	}
+	defer outFile.Close() //nolint:errcheck
+
+	_, err = io.Copy(outFile, resp.Body)
+	if err != nil {
+		return errors.Wrapf(err, "io.Copy() to %q", destPath)
+	}
+	return nil
+}
+
+func (mr *HTTPRepository) findArtifact(id string, version manifest.SemanticVersion) *manifest.Artifact {
+	for pkgID, pkg := range mr.repoConfig.Packages {
+		for _, art := range pkg.Artifacts {
+			if id == pkgID &&
+				art.Version.Major == version.Major &&
+				art.Version.Minor == version.Minor &&
+				art.Version.Patch == version.Patch {
+				return &art
+			}
+		}
+	}
+	return nil
+}
+
 type MultiRepository struct {
 	repos []Repository
 
-	pas []*PackageArtifact
+	pas []*RepoPackage
 }
 
 var (
@@ -113,9 +176,26 @@ func NewFromURLs(urls ...string) (*MultiRepository, error) {
 	return &MultiRepository{repos: repos, pas: nil}, nil
 }
 
+func (mr *MultiRepository) ID() string {
+	return "<MultiRepository>"
+}
+
+func (mr *MultiRepository) DownloadPackage(
+	ctx context.Context, pkg *RepoPackage, destPath string, dryRun bool,
+) error {
+	for _, r := range mr.repos {
+		if r.ID() != pkg.RepositoryID {
+			continue
+		}
+		slog.Debug("MultiRepository.DownloadPackage() trying repo", "repo", r.ID(), "for package", pkg.ID)
+		return errors.AddStack(r.DownloadPackage(ctx, pkg, destPath, dryRun))
+	}
+	return fmt.Errorf("package %s not found in any repository", pkg.ID)
+}
+
 // FetchPackages fetches each repository and adds their packages to the collection of PackageArtifacts.
-func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*PackageArtifact, error) {
-	mr.pas = []*PackageArtifact{}
+func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*RepoPackage, error) {
+	mr.pas = []*RepoPackage{}
 	for _, repo := range mr.repos {
 		pas, err := repo.FetchPackages(ctx)
 		if err != nil {

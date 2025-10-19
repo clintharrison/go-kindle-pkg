@@ -136,7 +136,7 @@ func TestResolveE2E_File(t *testing.T) {
 
 	cmd := NewCommand()
 	cmd.SetArgs([]string{
-		"--repo", "file://" + reposJSONPath,
+		"-r", "file://" + reposJSONPath,
 		"com.kindlemodding.examplepackage>=1.0.0",
 	})
 

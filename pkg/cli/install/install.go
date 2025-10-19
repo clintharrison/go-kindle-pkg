@@ -1,14 +1,19 @@
 package install
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"os"
+	"os/exec"
 	"strings"
 
 	"github.com/clintharrison/go-kindle-pkg/pkg/cli/clicommon"
 	"github.com/clintharrison/go-kindle-pkg/pkg/kpkg"
+	"github.com/clintharrison/go-kindle-pkg/pkg/repository"
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
 	"github.com/clintharrison/go-kindle-pkg/pkg/resolver"
+	"github.com/clintharrison/go-kindle-pkg/pkg/version"
 	"github.com/pingcap/errors"
 	"github.com/spf13/cobra"
 )
@@ -18,10 +23,27 @@ func NewCommand() *cobra.Command {
 		Use:   "install [flags] example.kpkg",
 		Short: "Extract and install a .kpkg file",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			r, err := clicommon.GetInitializedResolver(cmd)
+			ctx := cmd.Context()
+
+			dryRun, err := cmd.Flags().GetBool("dry-run")
 			if err != nil {
-				return errors.Wrap(err, "failed to initialize resolver")
+				return errors.Wrap(err, "failed to get dry-run flag")
 			}
+			repo, err := clicommon.GetRepoFromArgs(cmd)
+			if err != nil {
+				return errors.Wrap(err, "failed to initialize repository")
+			}
+			packages, err := repo.FetchPackages(cmd.Context())
+			if err != nil {
+				fmt.Fprintf( //nolint:errcheck
+					cmd.OutOrStderr(),
+					"ERROR: Unable to fetch packages from repositories:\n%v\n",
+					err)
+				return errors.Wrap(err, "failed to fetch packages from repositories")
+			}
+			fmt.Fprintf(cmd.OutOrStdout(), "Loaded %d package\n", len(packages)) //nolint:errcheck
+
+			res := resolver.NewResolverForRepositoryPackages(packages)
 
 			fileArgs, rest, err := findFileArgs(args)
 			if err != nil {
@@ -43,21 +65,227 @@ func NewCommand() *cobra.Command {
 
 			constraints = append(fileConstraints, constraints...)
 
-			result, err := r.Resolve(constraints, resolver.WithArtifacts(fileArtifacts))
+			result, err := res.Resolve(constraints, resolver.WithArtifacts(fileArtifacts))
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "ERROR: Unable to resolve packages:\n%v\n", err) //nolint:errcheck
 				return errors.Wrap(err, "failed to resolve packages")
 			}
 
-			cmd.OutOrStdout().Write([]byte("Resolved packages:\n")) //nolint:errcheck
-			for _, art := range result {
-				fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", art) //nolint:errcheck
+			slog.Debug("resolved packages", "result", result) //nolint:errcheck
+
+			installed, err := getInstalledPackages()
+			if err != nil {
+				return errors.Wrap(err, "failed to get installed packages")
 			}
-			return errors.Errorf("not implemented")
+
+			installedMap := make(map[resolver.ArtifactID]*resolver.Artifact)
+			for _, art := range installed {
+				installedMap[art.ID] = art
+			}
+			add, rm := resolver.DiffInstallations(installedMap, result)
+			if len(rm) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "\033[1mPackages to be removed:\033[0m\n") //nolint:errcheck
+				for _, art := range rm {
+					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", art) //nolint:errcheck
+				}
+			}
+			if len(add) > 0 {
+				fmt.Fprintf(cmd.OutOrStdout(), "\033[1mPackages to be installed:\033[0m\n") //nolint:errcheck
+				for _, art := range add {
+					fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", art) //nolint:errcheck
+				}
+			}
+
+			// Sigh, we have to go back to repository.RepoPackage from resolver.Artifact for downloading :(
+			addRPs := make([]*repository.RepoPackage, 0, len(add))
+			for _, art := range add {
+				rp := &repository.RepoPackage{
+					ID:            string(art.ID),
+					RepositoryID:  string(art.RepositoryID),
+					Version:       art.Version,
+					Dependencies:  nil,
+					SupportedArch: nil,
+				}
+				addRPs = append(addRPs, rp)
+			}
+			rmRPs := make([]*repository.RepoPackage, 0, len(rm))
+			for _, art := range rm {
+				rp := &repository.RepoPackage{
+					ID:           string(art.ID),
+					RepositoryID: string(art.RepositoryID),
+					Version:      art.Version,
+				}
+				rmRPs = append(rmRPs, rp)
+			}
+
+			fmt.Fprint(cmd.OutOrStdout(), "\n\033[1mPerforming package changes...\033[0m\n") //nolint:errcheck
+			err = performPackageChanges(ctx, repo, addRPs, rmRPs, dryRun)
+			if err != nil {
+				fmt.Fprintf(cmd.OutOrStdout(), "\033[1mPackages were not installed successfully!\033[0m\n\n") //nolint:errcheck
+				return errors.Wrap(err, "failed to install packages")
+			}
+			return nil
 		},
 	}
-
+	cmd.Flags().BoolP("dry-run", "n", false, "Perform a trial run with no changes made")
 	return cmd
+}
+
+func performPackageChanges(
+	ctx context.Context, repo repository.Repository, add, rm []*repository.RepoPackage, dryRun bool,
+) error {
+	slog.Debug("performPackageChanges()", "repo", repo.ID(), "add", len(add), "remove", len(rm), "dryRun", dryRun)
+	if len(rm) > 0 {
+		for _, rp := range rm {
+			err := removePackage(ctx, repo, rp, dryRun)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if len(add) > 0 {
+		for _, rp := range add {
+			err := addPackage(ctx, repo, rp, dryRun)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if dryRun {
+		fmt.Println("\n\033[1mDry run finished! No changes were made.\033[0m")
+		return nil
+	}
+	return nil
+}
+
+func removePackage(ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, dryRun bool) error {
+	// TODO: rewrite this to duplicate less with addPackage
+	var err error
+	baseDir := version.BaseDir()
+	pkgDir := fmt.Sprintf("%s-%d.%d.%d", rp.ID, rp.Version.Major, rp.Version.Minor, rp.Version.Patch)
+	fullPath := fmt.Sprintf("%s/%s", baseDir, pkgDir)
+
+	uninstallerPath := fullPath + "/uninstall.sh"
+
+	fmt.Printf("Running uninstall script for %s (version %s)\n", rp.ID, rp.Version.String())
+
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-l", uninstallerPath)
+	cmd.Dir = fullPath
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if dryRun {
+		fmt.Printf(" - [dry-run] /bin/sh -l %q\n", uninstallerPath)
+	} else {
+		err = cmd.Run()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to remove package dir %q: %w", fullPath, err)
+	}
+
+	if dryRun {
+		fmt.Printf(" - [dry-run] Removed package directory %q\n", fullPath)
+		return nil
+	}
+
+	err = os.RemoveAll(fullPath)
+	if err != nil {
+		return fmt.Errorf("failed to remove package dir %q: %w", fullPath, err)
+	}
+	return nil
+}
+
+// this is all begging to be refactored elsewhere
+
+func downloadAndUnpack(
+	ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, destDir string, dryRun bool,
+) error {
+	if dryRun {
+		fmt.Printf(" - [dry-run] Downloading and unpacking package %s to %s\n", rp, destDir)
+		return nil
+	}
+
+	err := os.MkdirAll(destDir, 0o755)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	tmpFile, err := os.CreateTemp("", "*.kpkg")
+	if err != nil {
+		return errors.Wrapf(err, "os.CreateTemp()")
+	}
+	defer func() {
+		_ = os.RemoveAll(tmpFile.Name())
+	}()
+
+	kpkgPath := tmpFile.Name()
+	slog.Debug("downloadPackage()", "kpkgPath", kpkgPath)
+	err = repo.DownloadPackage(ctx, rp, kpkgPath, dryRun)
+	if err != nil {
+		return errors.Wrapf(err, "failed to download package %s", rp)
+	}
+
+	if dryRun {
+		fmt.Printf(" - [dry-run] Unpacked package %s to %s\n", rp, destDir)
+		return nil
+	}
+	kpkgFile, err := kpkg.Open(kpkgPath)
+	if err != nil {
+		return errors.Wrapf(err, "kpkg.Open(%q)", kpkgPath)
+	}
+	defer func() { _ = kpkgFile.Close() }()
+
+	err = kpkgFile.ExtractAll(ctx, destDir, false, os.Stdout)
+	if err != nil {
+		return errors.Wrapf(err, "kpkg.ExtractAll(%q, %q)", rp, destDir)
+	}
+
+	return nil
+}
+
+func addPackage(ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, dryRun bool) error {
+	var err error
+	baseDir := version.BaseDir()
+	pkgDir := fmt.Sprintf("%s-%d.%d.%d", rp.ID, rp.Version.Major, rp.Version.Minor, rp.Version.Patch)
+	fullPath := fmt.Sprintf("%s/%s", baseDir, pkgDir)
+	tmpDirPath := fmt.Sprintf("%s/tmp/%s", baseDir, pkgDir)
+
+	// unpack to $baseDir/tmp/pkgDir
+	// mv tmp/pkgDir to $baseDir/pkgDir
+	// TODO: make this the download dir from the CLI args
+	slog.Debug("downloadAndUnpack()", "rp", rp, "tmpPath", tmpDirPath, "dryRun", dryRun)
+	err = downloadAndUnpack(ctx, repo, rp, tmpDirPath, dryRun)
+	if err != nil {
+		return errors.Wrapf(err, "failed to stage package %s", rp)
+	}
+
+	err = os.Rename(fmt.Sprintf("%s/tmp/%s", baseDir, pkgDir), fullPath)
+	if err != nil {
+		return errors.Wrapf(err, "failed to move package to final location %s", fullPath)
+	}
+
+	installerPath := fullPath + "/install.sh"
+
+	fmt.Printf("Running install script for %s (version %s)\n", rp.ID, rp.Version.String())
+
+	// TODO: cd to fullPath
+	cmd := exec.CommandContext(ctx, "/bin/sh", "-l", installerPath)
+	cmd.Stdout = os.Stdout
+	cmd.Stderr = os.Stderr
+	if dryRun {
+		fmt.Printf(" - [dry-run] /bin/sh -l %q\n", installerPath)
+	} else {
+		err = cmd.Run()
+	}
+	if err != nil {
+		return fmt.Errorf("failed to install package %q: %w", fullPath, err)
+	}
+	return nil
+}
+
+func getInstalledPackages() ([]*resolver.Artifact, error) {
+	// TODO: discover packages in the base dir
+	// TODO: discover external packages like /mnt/us/extensions/koreader
+	return []*resolver.Artifact{}, nil
 }
 
 func processKPKGArgs(fileArgs []string) ([]*resolver.Constraint, []*resolver.Artifact, error) {

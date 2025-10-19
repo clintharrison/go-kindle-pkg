@@ -38,5 +38,7 @@ func NewCommand() *cobra.Command {
 			return nil
 		},
 	}
+	cmd.PersistentFlags().StringArrayP("repo", "r", []string{},
+		"Repository URL(s) to use (can be specified multiple times)")
 	return cmd
 }

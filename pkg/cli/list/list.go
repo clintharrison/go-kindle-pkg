@@ -24,10 +24,10 @@ func NewCommand() *cobra.Command {
 			}
 
 			// now we group by repo then package for nicer printing
-			repos := map[string]map[string][]*repository.PackageArtifact{}
+			repos := map[string]map[string][]*repository.RepoPackage{}
 			for _, p := range packages {
 				if repos[p.RepositoryID] == nil {
-					repos[p.RepositoryID] = map[string][]*repository.PackageArtifact{}
+					repos[p.RepositoryID] = map[string][]*repository.RepoPackage{}
 				}
 				repos[p.RepositoryID][p.ID] = append(repos[p.RepositoryID][p.ID], p)
 			}

@@ -20,8 +20,9 @@ func NewRootCmd() *cobra.Command {
 		SilenceUsage: true,
 	}
 
-	cmd.PersistentFlags().String("install-dir", version.BaseDir+"/pkgs", "Directory for unpacked apps and libraries")
-	cmd.PersistentFlags().String("download-dir", version.BaseDir+"/downloads", "Directory to store downloaded .kpkg files")
+	cmd.PersistentFlags().String("install-dir", version.BaseDir()+"/pkgs", "Directory for unpacked apps and libraries")
+	cmd.PersistentFlags().String(
+		"download-dir", version.BaseDir()+"/downloads", "Directory to store downloaded .kpkg files")
 	cmd.PersistentFlags().StringArrayP("repo", "r", []string{},
 		"Repository URL(s) to use (can be specified multiple times)")
 

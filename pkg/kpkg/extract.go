@@ -14,7 +14,7 @@ import (
 	"github.com/pingcap/errors"
 )
 
-func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, w io.Writer) error {
+func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, logw io.Writer) error {
 	if targetDir == "" {
 		return errors.New("no target directory specified")
 	}
@@ -39,12 +39,12 @@ func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, w io
 		}
 		slog.Debug("extracting", "name", entry.Name, "type", entry.Typeflag, "size", entry.Size)
 		if test {
-			err := logEntry(w, entry)
+			err := logEntry(logw, entry)
 			if err != nil {
 				return err
 			}
 		} else {
-			err := extractEntry(ctx, w, k.tarReader, entry, targetDir)
+			err := extractEntry(ctx, logw, k.tarReader, entry, targetDir)
 			if err != nil {
 				return err
 			}
@@ -59,7 +59,7 @@ var attrOrder = []string{ //nolint:gochecknoglobals
 	"type", "mode", "size", "uid", "gid", "link",
 }
 
-func logEntry(w io.Writer, entry *tar.Header) error {
+func logEntry(logw io.Writer, entry *tar.Header) error {
 	// TODO: normalize name, don't allow path traversal upwards?
 	n := strings.TrimPrefix(entry.Name, "./")
 	// replace whitespace with octal escapes.
@@ -67,7 +67,7 @@ func logEntry(w io.Writer, entry *tar.Header) error {
 	for _, r := range []rune{'\t', '\n', '\v', '\f', '\r'} {
 		n = strings.ReplaceAll(n, string(r), fmt.Sprintf("\\%o", r))
 	}
-	w.Write([]byte(n)) //nolint:errcheck
+	logw.Write([]byte(n)) //nolint:errcheck
 
 	attrs := make(map[string]string)
 	attrs["size"] = strconv.FormatInt(entry.Size, 10)
@@ -99,15 +99,15 @@ func logEntry(w io.Writer, entry *tar.Header) error {
 	for _, k := range attrOrder {
 		v, ok := attrs[k]
 		if ok {
-			fmt.Fprintf(w, " %s=%s", k, v) //nolint:errcheck
+			fmt.Fprintf(logw, " %s=%s", k, v) //nolint:errcheck
 		}
 	}
-	w.Write([]byte("\n")) //nolint:errcheck
+	logw.Write([]byte("\n")) //nolint:errcheck
 	return nil
 }
 
-func extractEntry(_ context.Context, w io.Writer, r io.Reader, entry *tar.Header, targetDir string) error {
-	_ = logEntry(w, entry)
+func extractEntry(_ context.Context, logw io.Writer, r io.Reader, entry *tar.Header, targetDir string) error {
+	_ = logEntry(logw, entry)
 
 	path := strings.TrimPrefix(path.Clean(entry.Name), "./")
 	fullPath := targetDir + "/" + path
