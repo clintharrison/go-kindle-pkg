@@ -15,7 +15,10 @@ import (
 //go:embed testdata/koreader_1.2.0_armhf.kpkg
 var exampleKpkg []byte
 
-const exampleKpkgFiles = `app/ type=dir mode=755 size=0 uid=1000 gid=100
+const exampleKpkgFiles = `. type=dir mode=755 size=0 uid=1000 gid=100
+launch.sh type=file mode=755 size=67 uid=1000 gid=100
+manifest.json type=file mode=644 size=395 uid=1000 gid=100
+app/ type=dir mode=755 size=0 uid=1000 gid=100
 app/some-bin type=file mode=755 size=62 uid=1000 gid=100
 app/legacy-some-bin type=link mode=777 size=0 uid=1000 gid=100 link=some-bin
 install.sh type=file mode=755 size=39 uid=1000 gid=100
@@ -96,6 +99,8 @@ func TestExtractCmd_ExtractArchive(t *testing.T) {
 		extractedFiles = append(extractedFiles, file.Name())
 	}
 	require.ElementsMatch(t, extractedFiles, []string{
+		"launch.sh",
+		"manifest.json",
 		"app",
 		"install.sh",
 		"uninstall.sh",

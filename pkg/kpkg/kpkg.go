@@ -3,6 +3,7 @@ package kpkg
 import (
 	"archive/tar"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -28,7 +29,7 @@ type KPKG struct {
 	closerFuncs []func() error
 }
 
-func Open(path string) (*KPKG, error) {
+func Open(ctx context.Context, path string) (*KPKG, error) {
 	kpkg := &KPKG{} //nolint:exhaustruct // this is initialized as we go, to register closers
 
 	f, err := os.Open(path)
@@ -38,9 +39,16 @@ func Open(path string) (*KPKG, error) {
 	kpkg.RegisterCloser(f.Close)
 	kpkg.file = f
 	kpkg.path = path
-	kpkg.resetReader()
+	err = kpkg.resetReader()
+	if err != nil {
+		cerr := kpkg.Close()
+		if cerr != nil {
+			slog.Error("resetReader()", "close_error", cerr, "reset_error", err)
+		}
+		return nil, errors.Wrapf(err, "kpkg.resetReader() for %q", path)
+	}
 
-	err = kpkg.ReadMetadata()
+	err = kpkg.ReadMetadata(ctx)
 	if err != nil {
 		cerr := kpkg.Close()
 		if cerr != nil {
@@ -52,8 +60,11 @@ func Open(path string) (*KPKG, error) {
 	return kpkg, nil
 }
 
-func (k *KPKG) ReadMetadata() error {
-	k.resetReader()
+func (k *KPKG) ReadMetadata(ctx context.Context) error {
+	err := k.resetReader()
+	if err != nil {
+		return errors.Wrap(err, "kpkg.resetReader()")
+	}
 
 	k.mu.Lock()
 	defer k.mu.Unlock()
@@ -63,6 +74,9 @@ func (k *KPKG) ReadMetadata() error {
 	}
 
 	for {
+		if ctx.Err() != nil {
+			return errors.AddStack(ctx.Err())
+		}
 		entry, err := k.tarReader.Next()
 		if err != nil {
 			return errors.Wrapf(err, "tarReader.Next()")

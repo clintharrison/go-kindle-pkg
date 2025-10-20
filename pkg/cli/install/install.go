@@ -45,7 +45,7 @@ func NewCommand() *cobra.Command {
 
 			// read metadata from .kpkg files to generate constraints and artifacts
 			// used for resolution
-			fileConstraints, err := processKPKGArgs(fileArgs)
+			fileConstraints, err := processKPKGArgs(ctx, fileArgs)
 			if err != nil {
 				return err
 			}
@@ -76,7 +76,7 @@ func NewCommand() *cobra.Command {
 				return errors.Wrap(err, "failed to resolve packages")
 			}
 
-			slog.Debug("resolved packages", "result", result) //nolint:errcheck
+			slog.Debug("resolved packages", "result", result)
 
 			installed, err := getInstalledPackages()
 			if err != nil {
@@ -115,10 +115,21 @@ func NewCommand() *cobra.Command {
 			}
 			rmRPs := make([]*repository.RepoPackage, 0, len(rm))
 			for _, art := range rm {
+				var ds []repository.PackageDependency
+				for _, d := range art.Dependencies {
+					ds = append(ds, repository.PackageDependency{
+						ID:           string(d.ID),
+						Min:          d.Min,
+						Max:          d.Max,
+						RepositoryID: nil,
+					})
+				}
 				rp := &repository.RepoPackage{
-					ID:           string(art.ID),
-					RepositoryID: string(art.RepositoryID),
-					Version:      art.Version,
+					ID:            string(art.ID),
+					RepositoryID:  string(art.RepositoryID),
+					SupportedArch: art.SupportedArch,
+					Version:       art.Version,
+					Dependencies:  ds,
 				}
 				rmRPs = append(rmRPs, rp)
 			}
@@ -142,7 +153,7 @@ func performPackageChanges(
 	slog.Debug("performPackageChanges()", "repo", repo.ID(), "add", len(add), "remove", len(rm), "dryRun", dryRun)
 	if len(rm) > 0 {
 		for _, rp := range rm {
-			err := removePackage(ctx, repo, rp, dryRun)
+			err := removePackage(ctx, rp, dryRun)
 			if err != nil {
 				return err
 			}
@@ -164,7 +175,7 @@ func performPackageChanges(
 	return nil
 }
 
-func removePackage(ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, dryRun bool) error {
+func removePackage(ctx context.Context, rp *repository.RepoPackage, dryRun bool) error {
 	// TODO: rewrite this to duplicate less with addPackage
 	var err error
 	baseDir := version.BaseDir()
@@ -210,7 +221,7 @@ func downloadAndUnpack(
 		return nil
 	}
 
-	err := os.MkdirAll(destDir, 0o755)
+	err := os.MkdirAll(destDir, 0o755) //nolint:gosec
 	if err != nil {
 		return errors.AddStack(err)
 	}
@@ -227,14 +238,14 @@ func downloadAndUnpack(
 	slog.Debug("downloadPackage()", "kpkgPath", kpkgPath)
 	err = repo.DownloadPackage(ctx, rp, kpkgPath, dryRun)
 	if err != nil {
-		return err
+		return errors.Wrapf(err, "repo.DownloadPackage(%q)", kpkgPath)
 	}
 
 	if dryRun {
 		fmt.Printf(" - [dry-run] Unpacked package %s to %s\n", rp, destDir)
 		return nil
 	}
-	kpkgFile, err := kpkg.Open(kpkgPath)
+	kpkgFile, err := kpkg.Open(ctx, kpkgPath)
 	if err != nil {
 		return errors.Wrapf(err, "kpkg.Open(%q)", kpkgPath)
 	}
@@ -265,18 +276,21 @@ func addPackage(ctx context.Context, repo repository.Repository, rp *repository.
 	}
 
 	installerPath := destDir + "/install.sh"
-	if _, err := os.Stat(installerPath); os.IsNotExist(err) {
+	_, err = os.Stat(installerPath)
+	if os.IsNotExist(err) {
 		slog.Debug("no install script for package %q", "path", rp.ID)
 		return nil
 	}
+	// TODO: add test for this behavior
+	os.Chmod(installerPath, 0o755) //nolint:gosec
 
 	fmt.Printf("Running install script for %s (version %s)\n", rp.ID, rp.Version.String())
 
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-l", installerPath)
 	cmd.Env = append(cmd.Env, os.Environ()...)
-	cmd.Env = append(cmd.Env, fmt.Sprintf("KPM_INSTALL_DIR=%s", destDir))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("KPM_BASE_DIR=%s", baseDir))
-	cmd.Env = append(cmd.Env, fmt.Sprintf("KPM_USERSTORE_DIR=%s", version.UserstoreDir()))
+	cmd.Env = append(cmd.Env, "KPM_INSTALL_DIR="+destDir)
+	cmd.Env = append(cmd.Env, "KPM_BASE_DIR="+baseDir)
+	cmd.Env = append(cmd.Env, "KPM_USERSTORE_DIR="+version.UserstoreDir())
 	cmd.Dir = destDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
@@ -297,10 +311,10 @@ func getInstalledPackages() ([]*resolver.VersionedPackage, error) {
 	return []*resolver.VersionedPackage{}, nil
 }
 
-func processKPKGArgs(fileArgs []string) ([]*resolver.Constraint, error) {
+func processKPKGArgs(ctx context.Context, fileArgs []string) ([]*resolver.Constraint, error) {
 	var manifests []*manifest.Manifest
 	for _, f := range fileArgs {
-		kpkg, err := kpkg.Open(f)
+		kpkg, err := kpkg.Open(ctx, f)
 		if err != nil {
 			return nil, errors.Wrapf(err, "kpkg.OpenKPKGFile(%q)", f)
 		}

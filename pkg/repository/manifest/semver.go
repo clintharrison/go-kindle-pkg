@@ -40,7 +40,11 @@ func (sv *SemanticVersion) UnmarshalJSON(data []byte) error {
 
 func (sv *SemanticVersion) MarshalJSON() ([]byte, error) {
 	vs := []int{sv.Major, sv.Minor, sv.Patch}
-	return json.Marshal(vs)
+	bs, err := json.Marshal(vs)
+	if err != nil {
+		return nil, errors.AddStack(err)
+	}
+	return bs, nil
 }
 
 func (sv *SemanticVersion) String() string {

@@ -33,7 +33,7 @@ func NewCommand() *cobra.Command {
 			}
 
 			// the real work
-			pkg, err := kpkg.Open(packagePath)
+			pkg, err := kpkg.Open(ctx, packagePath)
 			if err != nil {
 				return errors.Wrapf(err, "kpkg.Open(%q)", packagePath)
 			}

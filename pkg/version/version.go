@@ -12,7 +12,7 @@ const (
 	Version     = "0.0.1"
 )
 
-var logged = false
+var logged = false //nolint:gochecknoglobals
 
 func BaseDir() string {
 	hostname, err := os.Hostname()
@@ -36,6 +36,6 @@ func UserstoreDir() string {
 	}
 	// for non-Kindle testing, use a temp directory
 	dir := BaseDir() + "/userstore"
-	os.MkdirAll(dir, 0o755)
+	os.MkdirAll(dir, 0o755) //nolint:errcheck,gosec // If this fails, :shrug: we'll find out when writing to it
 	return dir
 }

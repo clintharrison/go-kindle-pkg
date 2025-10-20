@@ -83,6 +83,7 @@ func NewLocalFileRepository(paths ...string) *LocalFileRepository {
 	return &LocalFileRepository{
 		paths:          paths,
 		pathForPackage: make(map[string]string, len(paths)),
+		pkgs:           nil,
 	}
 }
 
@@ -94,11 +95,34 @@ func (r *LocalFileRepository) ID() string {
 	return localFileRepoID
 }
 
+type contextReader struct {
+	ctx context.Context //nolint:containedctx
+	r   io.Reader
+}
+
+func newContextReader(ctx context.Context, r io.Reader) *contextReader {
+	return &contextReader{ctx, r}
+}
+
+func (r *contextReader) Read(p []byte) (int, error) {
+	select {
+	case <-r.ctx.Done():
+		return 0, r.ctx.Err() //nolint:wrapcheck
+	default:
+		return r.r.Read(p) //nolint:wrapcheck
+	}
+}
+
 func (r *LocalFileRepository) DownloadPackage(
 	ctx context.Context, pkg *RepoPackage, destPath string, dryRun bool,
 ) error {
 	slog.Debug("LocalFileRepository.DownloadPackage()",
 		"package", pkg.ID, "version", pkg.Version.String(), "repo_id", pkg.RepositoryID, "pkg", pkg, "self", r)
+	if dryRun {
+		fmt.Printf("  [dry run] Copying package %s version %s to %s\n",
+			pkg.ID, pkg.Version.String(), destPath)
+		return nil
+	}
 	srcPath, ok := r.pathForPackage[pkg.ID]
 	if !ok {
 		return fmt.Errorf("package %s not found in local file repository", pkg.ID)
@@ -116,7 +140,7 @@ func (r *LocalFileRepository) DownloadPackage(
 	}
 	defer outFile.Close()
 
-	_, err = io.Copy(outFile, src)
+	_, err = io.Copy(outFile, newContextReader(ctx, src))
 	if err != nil {
 		return errors.Wrapf(err, "io.Copy() to %q", destPath)
 	}
@@ -133,7 +157,7 @@ func (r *LocalFileRepository) FetchPackages(ctx context.Context) ([]*RepoPackage
 			// TODO: scan directory for .kpkg files?
 			continue
 		}
-		k, err := kpkg.Open(p)
+		k, err := kpkg.Open(ctx, p)
 		if err != nil {
 			return nil, errors.Wrapf(err, "kpkg.Open(%q)", p)
 		}
@@ -159,7 +183,8 @@ func (r *LocalFileRepository) FetchPackages(ctx context.Context) ([]*RepoPackage
 				Minor: k.Manifest.Version.Minor,
 				Patch: k.Manifest.Version.Patch,
 			},
-			Dependencies: deps,
+			SupportedArch: k.Manifest.SupportedArch,
+			Dependencies:  deps,
 		}
 		r.pkgs = append(r.pkgs, NewRepoPackage(k.Manifest.ID, localFileRepoID, artifact))
 		r.pathForPackage[k.Manifest.ID] = p
@@ -181,7 +206,7 @@ func NewHTTPRepository(rawurl string) (*HTTPRepository, error) {
 	}
 	switch parsed.Scheme {
 	case "http", "https", "file":
-		return &HTTPRepository{url: parsed, pas: nil}, nil
+		return &HTTPRepository{url: parsed, pas: nil, repoConfig: nil}, nil
 	default:
 		return nil, fmt.Errorf("invalid URL scheme %q in repo %q", parsed.Scheme, rawurl)
 	}
@@ -191,48 +216,53 @@ func (r *HTTPRepository) String() string {
 	return fmt.Sprintf("HTTPRepository(%v)", r.url)
 }
 
-func (mr *HTTPRepository) ID() string {
-	return mr.repoConfig.ID
+func (r *HTTPRepository) ID() string {
+	return r.repoConfig.ID
 }
 
-func (mr *HTTPRepository) FetchPackages(ctx context.Context) ([]*RepoPackage, error) {
-	mr.pas = []*RepoPackage{}
+func (r *HTTPRepository) FetchPackages(ctx context.Context) ([]*RepoPackage, error) {
+	r.pas = []*RepoPackage{}
 	var repoConfig manifest.RepositoryConfig
-	err := readJSONFromURL(ctx, mr.url, &repoConfig)
+	err := readJSONFromURL(ctx, r.url, &repoConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to read repository from %q: %w", mr.url.String(), err)
+		return nil, fmt.Errorf("failed to read repository from %q: %w", r.url.String(), err)
 	}
-	mr.repoConfig = &repoConfig
+	r.repoConfig = &repoConfig
 
 	for id, pkg := range repoConfig.Packages {
 		for _, art := range pkg.Artifacts {
-			mr.pas = append(mr.pas, NewRepoPackage(id, repoConfig.ID, &art))
+			r.pas = append(r.pas, NewRepoPackage(id, repoConfig.ID, &art))
 		}
 	}
-	return mr.pas, nil
+	return r.pas, nil
 }
 
-func (mr *HTTPRepository) DownloadPackage(
+func (r *HTTPRepository) DownloadPackage(
 	ctx context.Context, pkg *RepoPackage, destPath string, dryRun bool,
 ) error {
 	slog.Debug("HTTPRepository.DownloadPackage()", "package", pkg.ID, "version", pkg.Version.String(),
-		"repo_id", pkg.RepositoryID, "repo_config_id", mr.repoConfig.ID)
-	if pkg.RepositoryID != mr.repoConfig.ID {
+		"repo_id", pkg.RepositoryID, "repo_config_id", r.repoConfig.ID)
+	if pkg.RepositoryID != r.repoConfig.ID {
 		return fmt.Errorf("package %s does not belong to repository %s",
-			pkg.ID, mr.repoConfig.ID)
+			pkg.ID, r.repoConfig.ID)
 	}
 
-	art := mr.findArtifact(pkg.ID, pkg.Version)
+	art := r.findArtifact(pkg.ID, pkg.Version)
 	slog.Debug("HTTPRepository.DownloadPackage()",
 		"package", pkg.ID, "version", pkg.Version.String(), "artifact", art)
 
 	if dryRun {
 		fmt.Printf("  [dry run] Downloading package %s version %s from %s to %s [artifact=%s]\n",
-			pkg.ID, pkg.Version.String(), mr.url.String(), destPath, art.URL)
+			pkg.ID, pkg.Version.String(), r.url.String(), destPath, art.URL)
 		return nil
 	}
 
-	resp, err := http.Get(art.URL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, art.URL, nil)
+	if err != nil {
+		return errors.Wrapf(err, "http.NewRequestWithContext(%q)", art.URL)
+	}
+	req.Header.Set("User-Agent", version.FullVersion)
+	resp, err := http.DefaultClient.Do(req)
 	if err != nil {
 		return errors.Wrapf(err, "http.Get(%q)", art.URL)
 	}
@@ -242,7 +272,7 @@ func (mr *HTTPRepository) DownloadPackage(
 	if err != nil {
 		return errors.Wrapf(err, "os.Create(%q)", destPath)
 	}
-	defer outFile.Close() //nolint:errcheck
+	defer outFile.Close()
 
 	_, err = io.Copy(outFile, resp.Body)
 	if err != nil {
@@ -251,8 +281,8 @@ func (mr *HTTPRepository) DownloadPackage(
 	return nil
 }
 
-func (mr *HTTPRepository) findArtifact(id string, version manifest.SemanticVersion) *manifest.Artifact {
-	for pkgID, pkg := range mr.repoConfig.Packages {
+func (r *HTTPRepository) findArtifact(id string, version manifest.SemanticVersion) *manifest.Artifact {
+	for pkgID, pkg := range r.repoConfig.Packages {
 		for _, art := range pkg.Artifacts {
 			if id == pkgID &&
 				art.Version.Major == version.Major &&
@@ -281,26 +311,27 @@ var (
 func NewMultiRepository(repos ...Repository) *MultiRepository {
 	return &MultiRepository{
 		repos: repos,
+		pas:   nil,
 	}
 }
 
-func (mr *MultiRepository) AddRepository(repo Repository) {
-	mr.repos = append(mr.repos, repo)
-	mr.pas = nil // invalidate cached packages
+func (r *MultiRepository) AddRepository(repo Repository) {
+	r.repos = append(r.repos, repo)
+	r.pas = nil // invalidate cached packages
 }
 
-func (mr *MultiRepository) String() string {
-	return fmt.Sprintf("MultiRepository(%v)", mr.repos)
+func (r *MultiRepository) String() string {
+	return fmt.Sprintf("MultiRepository(%v)", r.repos)
 }
 
-func (mr *MultiRepository) ID() string {
+func (r *MultiRepository) ID() string {
 	return "<MultiRepository>"
 }
 
-func (mr *MultiRepository) DownloadPackage(
+func (r *MultiRepository) DownloadPackage(
 	ctx context.Context, pkg *RepoPackage, destPath string, dryRun bool,
 ) error {
-	for _, r := range mr.repos {
+	for _, r := range r.repos {
 		if r.ID() != pkg.RepositoryID {
 			continue
 		}
@@ -311,17 +342,17 @@ func (mr *MultiRepository) DownloadPackage(
 }
 
 // FetchPackages fetches each repository and adds their packages to the collection of PackageArtifacts.
-func (mr *MultiRepository) FetchPackages(ctx context.Context) ([]*RepoPackage, error) {
-	slog.Debug("fetching packages", "repos", mr.repos)
-	mr.pas = []*RepoPackage{}
-	for _, repo := range mr.repos {
+func (r *MultiRepository) FetchPackages(ctx context.Context) ([]*RepoPackage, error) {
+	slog.Debug("fetching packages", "repos", r.repos)
+	r.pas = []*RepoPackage{}
+	for _, repo := range r.repos {
 		pas, err := repo.FetchPackages(ctx)
 		if err != nil {
 			return nil, errors.AddStack(err)
 		}
-		mr.pas = append(mr.pas, pas...)
+		r.pas = append(r.pas, pas...)
 	}
-	return mr.pas, nil
+	return r.pas, nil
 }
 
 func readJSONFromURL(ctx context.Context, url *url.URL, out interface{}) error {

@@ -35,10 +35,11 @@ func mkMinMaxC(
 
 func mkPkgA(id string, major, minor, patch int, deps ...*Constraint) *VersionedPackage {
 	return &VersionedPackage{
-		ID:           ArtifactID(id),
-		RepositoryID: "",
-		Version:      mkSV(major, minor, patch),
-		Dependencies: deps,
+		ID:            ArtifactID(id),
+		RepositoryID:  "",
+		Version:       mkSV(major, minor, patch),
+		Dependencies:  deps,
+		SupportedArch: nil,
 	}
 }
 
@@ -206,19 +207,21 @@ func TestResolver(t *testing.T) {
 			expectedList := []VersionedPackage{}
 			for _, a := range tt.expected {
 				expectedList = append(expectedList, VersionedPackage{
-					ID:           a.ID,
-					Version:      a.Version,
-					RepositoryID: "",
-					Dependencies: nil,
+					ID:            a.ID,
+					Version:       a.Version,
+					RepositoryID:  "",
+					SupportedArch: nil,
+					Dependencies:  nil,
 				})
 			}
 			resultList := []VersionedPackage{}
 			for _, a := range result {
 				resultList = append(resultList, VersionedPackage{
-					ID:           a.ID,
-					Version:      a.Version,
-					RepositoryID: "",
-					Dependencies: nil,
+					ID:            a.ID,
+					Version:       a.Version,
+					RepositoryID:  "",
+					SupportedArch: nil,
+					Dependencies:  nil,
 				})
 			}
 			require.ElementsMatch(t, expectedList, resultList, "Expected %v, got %v", expectedList, resultList)

@@ -1,0 +1,11 @@
+{
+    "id": "kterm",
+    "name": "kterm",
+    "author": "bfabiszewski, packaged by clint32",
+    "description": "gtk+ terminal emulator with embedded virtual keyboard for Kindle",
+    "version": [
+        2,
+        6,
+        0
+    ]
+}

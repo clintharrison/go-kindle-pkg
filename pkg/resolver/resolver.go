@@ -19,8 +19,9 @@ type VersionedPackage struct {
 	ID           ArtifactID
 	RepositoryID RepositoryID
 	// version is not optional!
-	Version      manifest.SemanticVersion
-	Dependencies []*Constraint
+	Version       manifest.SemanticVersion
+	Dependencies  []*Constraint
+	SupportedArch []string
 }
 
 func (a *VersionedPackage) String() string {
@@ -86,10 +87,11 @@ func NewResolverForRepositoryPackages(packages []*repository.RepoPackage) *Resol
 			}
 		}
 		ra := &VersionedPackage{
-			ID:           ArtifactID(pa.ID),
-			RepositoryID: RepositoryID(pa.RepositoryID),
-			Version:      pa.Version,
-			Dependencies: ds,
+			ID:            ArtifactID(pa.ID),
+			RepositoryID:  RepositoryID(pa.RepositoryID),
+			Version:       pa.Version,
+			SupportedArch: pa.SupportedArch,
+			Dependencies:  ds,
 		}
 		res = append(res, ra)
 	}

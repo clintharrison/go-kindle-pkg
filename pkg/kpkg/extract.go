@@ -54,7 +54,7 @@ func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, logw
 				return err
 			}
 		} else {
-			err := extractEntry(ctx, logw, k.tarReader, entry, targetDir)
+			err := extractEntry(ctx, k.tarReader, entry, targetDir)
 			if err != nil {
 				return err
 			}
@@ -76,6 +76,9 @@ func logEntry(logw io.Writer, entry *tar.Header) error {
 	// this should maybe replace more than that, but for now this will do?
 	for _, r := range []rune{'\t', '\n', '\v', '\f', '\r'} {
 		n = strings.ReplaceAll(n, string(r), fmt.Sprintf("\\%o", r))
+	}
+	if n == "" {
+		n = "."
 	}
 	logw.Write([]byte(n)) //nolint:errcheck
 
@@ -116,9 +119,7 @@ func logEntry(logw io.Writer, entry *tar.Header) error {
 	return nil
 }
 
-func extractEntry(_ context.Context, logw io.Writer, r io.Reader, entry *tar.Header, targetDir string) error {
-	// _ = logEntry(logw, entry)
-
+func extractEntry(_ context.Context, r io.Reader, entry *tar.Header, targetDir string) error {
 	path := strings.TrimPrefix(path.Clean(entry.Name), "./")
 	fullPath := targetDir + "/" + path
 
