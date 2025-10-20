@@ -24,7 +24,7 @@ type VersionedPackage struct {
 	SupportedArch []string
 }
 
-func (a *VersionedPackage) String() string {
+func (a VersionedPackage) String() string {
 	return fmt.Sprintf("%s-%d.%d.%d", a.ID, a.Version.Major, a.Version.Minor, a.Version.Patch)
 }
 
@@ -245,5 +245,43 @@ func DiffInstallations(current, desired map[ArtifactID]*VersionedPackage) ([]*Ve
 		}
 	}
 
+	add = sortedChangeOrder(add)
+	rm = sortedChangeOrder(rm)
+
 	return add, rm
+}
+
+func sortedChangeOrder(changes []*VersionedPackage) []*VersionedPackage {
+	type node struct {
+		art      *VersionedPackage
+		children []*node
+	}
+	graph := make(map[ArtifactID]*node)
+	for _, art := range changes {
+		graph[art.ID] = &node{art: art}
+	}
+	for _, n := range graph {
+		for _, dep := range n.art.Dependencies {
+			if child, ok := graph[dep.ID]; ok {
+				n.children = append(n.children, child)
+			}
+		}
+	}
+	visited := make(map[ArtifactID]bool)
+	var orderedPkgs []*VersionedPackage
+	var visit func(n *node)
+	visit = func(n *node) {
+		if visited[n.art.ID] {
+			return
+		}
+		visited[n.art.ID] = true
+		for _, child := range n.children {
+			visit(child)
+		}
+		orderedPkgs = append(orderedPkgs, n.art)
+	}
+	for _, n := range graph {
+		visit(n)
+	}
+	return orderedPkgs
 }

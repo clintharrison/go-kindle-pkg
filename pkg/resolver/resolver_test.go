@@ -228,3 +228,107 @@ func TestResolver(t *testing.T) {
 		})
 	}
 }
+
+func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
+	t.Parallel()
+
+	tt := []struct {
+		name        string
+		universe    []*VersionedPackage
+		current     map[ArtifactID]*VersionedPackage
+		constraints []*Constraint
+		expectedAdd []string
+		expectedRm  []string
+	}{
+		{
+			name: "simple linear dependencies",
+			universe: []*VersionedPackage{
+				mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
+				mkPkgA("pkgC", 1, 0, 0, mkMinC("pkgD", 1, 0, 0)),
+				mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgE", 1, 0, 0)),
+				mkPkgA("pkgE", 1, 0, 0),
+			},
+			constraints: []*Constraint{
+				mkMinC("pkgA", 1, 0, 0),
+			},
+			expectedAdd: []string{
+				"pkgE-1.0.0",
+				"pkgD-1.0.0",
+				"pkgC-1.0.0",
+				"pkgB-1.0.0",
+				"pkgA-1.0.0",
+			},
+		},
+
+		{
+			name: "branching dependencies",
+			universe: []*VersionedPackage{
+				mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
+				mkPkgA("pkgC", 1, 0, 0),
+				mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+			},
+
+			constraints: []*Constraint{
+				mkMinC("pkgD", 1, 0, 0),
+				mkMinC("pkgA", 1, 0, 0),
+			},
+
+			expectedAdd: []string{
+				"pkgC-1.0.0",
+				"pkgB-1.0.0",
+				"pkgD-1.0.0",
+				"pkgA-1.0.0",
+			},
+		},
+
+		{
+			name: "with removal",
+			universe: []*VersionedPackage{
+				mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
+				mkPkgA("pkgC", 1, 0, 0),
+				mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+			},
+
+			constraints: []*Constraint{
+				mkMinC("pkgA", 1, 0, 0),
+			},
+			current: map[ArtifactID]*VersionedPackage{
+				ArtifactID("pkgC"): mkPkgA("pkgC", 0, 9, 9),
+			},
+
+			expectedAdd: []string{
+				"pkgC-1.0.0",
+				"pkgB-1.0.0",
+				"pkgA-1.0.0",
+			},
+			expectedRm: []string{
+				"pkgC-0.9.9",
+			},
+		},
+	}
+	for _, test := range tt {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			r := NewResolver(test.universe)
+			result, err := r.Resolve(test.constraints)
+			require.NoError(t, err)
+			add, rm := DiffInstallations(test.current, result)
+			require.NoError(t, err)
+
+			var addIDs []string
+			for _, a := range add {
+				addIDs = append(addIDs, a.String())
+			}
+			require.Equal(t, test.expectedAdd, addIDs)
+
+			var rmIDs []string
+			for _, a := range rm {
+				rmIDs = append(rmIDs, a.String())
+			}
+			require.Equal(t, test.expectedRm, rmIDs)
+		})
+	}
+}

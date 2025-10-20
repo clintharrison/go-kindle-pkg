@@ -282,7 +282,10 @@ func addPackage(ctx context.Context, repo repository.Repository, rp *repository.
 		return nil
 	}
 	// TODO: add test for this behavior
-	os.Chmod(installerPath, 0o755) //nolint:gosec
+	err = os.Chmod(installerPath, 0o755) //nolint:gosec
+	if err != nil {
+		return fmt.Errorf("failed to make installer %q executable: %w", installerPath, err)
+	}
 
 	fmt.Printf("Running install script for %s (version %s)\n", rp.ID, rp.Version.String())
 
