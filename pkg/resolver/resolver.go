@@ -219,6 +219,10 @@ func (r *Resolver) resolveRecursive(
 }
 
 func DiffInstallations(current, desired map[ArtifactID]*VersionedPackage) ([]*VersionedPackage, []*VersionedPackage) {
+	// TODO: This needs to consider dependencies when determining the order to add/remove packages.
+	// We don't want to install a package until its dependencies are available, and we don't want
+	// to remove a package until all packages depending on it are removed.
+
 	var add []*VersionedPackage
 	var rm []*VersionedPackage
 
