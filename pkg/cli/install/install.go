@@ -266,20 +266,24 @@ func downloadAndUnpack(
 	if err != nil {
 		return errors.Wrapf(err, "kpkg.ExtractAll(%q, %q)", rp, tmpDir)
 	}
-	copyDirSafe(tmpDir, destDir)
+	err = copyDirSafe(tmpDir, destDir)
+	if err != nil {
+		return errors.Wrapf(err, "copyDirSafe(%q, %q)", tmpDir, destDir)
+	}
 
 	return nil
 }
 
 func copyDirSafe(srcDir, destDir string) error {
 	srcFS := os.DirFS(srcDir)
-	return fs.WalkDir(srcFS, ".", func(srcPath string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(srcFS, ".", func(srcPath string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return errors.AddStack(err)
 		}
 		destPath := filepath.Join(destDir, srcPath)
 		slog.Debug("copyDirSafe()", "srcPath", srcPath, "destPath", destPath)
 
+		//nolint:exhaustive
 		switch d.Type() & fs.ModeType {
 		case fs.ModeSymlink:
 			slog.Warn("link copying is not supported on /mnt/us, skipping", "path", srcPath)
@@ -312,6 +316,7 @@ func copyDirSafe(srcDir, destDir string) error {
 		}
 		return nil
 	})
+	return errors.AddStack(err)
 }
 
 func addPackage(ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, dryRun bool) error {
