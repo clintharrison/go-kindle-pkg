@@ -334,6 +334,28 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 				"pkgD-1.0.0",
 			},
 		},
+
+		{
+			name: "with loop",
+			universe: []*VersionedPackage{
+				mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0), mkMinC("pkgD", 1, 0, 0)),
+				mkPkgA("pkgC", 1, 0, 0, mkMinC("pkgD", 1, 0, 0)),
+				mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
+			},
+
+			constraints: []*Constraint{
+				mkMinC("pkgD", 1, 0, 0),
+				mkMinC("pkgA", 1, 0, 0),
+			},
+
+			expectedAdd: []string{
+				"pkgD-1.0.0",
+				"pkgC-1.0.0",
+				"pkgB-1.0.0",
+				"pkgA-1.0.0",
+			},
+		},
 	}
 	for _, test := range tt {
 		t.Run(test.name, func(t *testing.T) {
