@@ -265,9 +265,9 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 			name: "branching dependencies",
 			universe: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
-				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
-				mkPkgA("pkgC", 1, 0, 0),
-				mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0), mkMinC("pkgD", 1, 0, 0)),
+				mkPkgA("pkgC", 1, 0, 0, mkMinC("pkgD", 1, 0, 0)),
+				mkPkgA("pkgD", 1, 0, 0),
 			},
 
 			constraints: []*Constraint{
@@ -276,9 +276,9 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 			},
 
 			expectedAdd: []string{
+				"pkgD-1.0.0",
 				"pkgC-1.0.0",
 				"pkgB-1.0.0",
-				"pkgD-1.0.0",
 				"pkgA-1.0.0",
 			},
 		},
@@ -306,6 +306,31 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 			},
 			expectedRm: []string{
 				"pkgC-0.9.9",
+			},
+		},
+
+		{
+			name: "with complex removal",
+			universe: []*VersionedPackage{
+				mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
+				mkPkgA("pkgC", 1, 0, 0),
+				mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+			},
+
+			constraints: []*Constraint{},
+			current: map[ArtifactID]*VersionedPackage{
+				ArtifactID("pkgA"): mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
+				ArtifactID("pkgB"): mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
+				ArtifactID("pkgC"): mkPkgA("pkgC", 1, 0, 0),
+				ArtifactID("pkgD"): mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgA", 1, 0, 0)),
+			},
+
+			expectedRm: []string{
+				"pkgC-1.0.0",
+				"pkgB-1.0.0",
+				"pkgA-1.0.0",
+				"pkgD-1.0.0",
 			},
 		},
 	}
