@@ -29,15 +29,25 @@ func (k *KPKG) ExtractAll(ctx context.Context, targetDir string, test bool, logw
 			}
 		}
 	}
+	err = k.resetReader()
+	if err != nil {
+		return errors.Wrap(err, "kpkg.resetReader()")
+	}
+
 	for {
 		entry, err := k.tarReader.Next()
+		nm := "<nil>"
+		if entry != nil {
+			nm = entry.Name
+		}
+		slog.Debug("Read tar entry", "name", nm, "err", err)
 		if err == io.EOF {
 			break
 		}
 		if err != nil {
 			return errors.Wrap(err, "tarReader.Next()")
 		}
-		slog.Debug("extracting", "name", entry.Name, "type", entry.Typeflag, "size", entry.Size)
+		slog.Debug("extracting", "name", entry.Name, "type", entry.Typeflag, "size", entry.Size, "dest", targetDir)
 		if test {
 			err := logEntry(logw, entry)
 			if err != nil {
@@ -107,7 +117,7 @@ func logEntry(logw io.Writer, entry *tar.Header) error {
 }
 
 func extractEntry(_ context.Context, logw io.Writer, r io.Reader, entry *tar.Header, targetDir string) error {
-	_ = logEntry(logw, entry)
+	// _ = logEntry(logw, entry)
 
 	path := strings.TrimPrefix(path.Clean(entry.Name), "./")
 	fullPath := targetDir + "/" + path

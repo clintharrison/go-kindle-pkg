@@ -21,6 +21,7 @@ type KPKG struct {
 
 	Manifest *manifest.Manifest
 
+	path      string
 	file      *os.File
 	tarReader *tar.Reader
 
@@ -36,27 +37,8 @@ func Open(path string) (*KPKG, error) {
 	}
 	kpkg.RegisterCloser(f.Close)
 	kpkg.file = f
-
-	var r io.Reader
-	r, err = xz.NewReader(f)
-	if err != nil {
-		slog.Debug("not xz compressed, trying gzip", "error", err)
-		_, err = f.Seek(0, 0)
-		if err != nil {
-			return nil, errors.Wrapf(err, "f.Seek(0,0) for %q", path)
-		}
-		r, err = gzip.NewReader(f)
-		if err != nil {
-			slog.Debug("not gzip compressed, using raw file", "error", err)
-			_, err = f.Seek(0, 0)
-			if err != nil {
-				return nil, errors.Wrapf(err, "f.Seek(0,0) for %q", path)
-			}
-			r = f
-		}
-	}
-
-	kpkg.tarReader = tar.NewReader(r)
+	kpkg.path = path
+	kpkg.resetReader()
 
 	err = kpkg.ReadMetadata()
 	if err != nil {
@@ -71,8 +53,11 @@ func Open(path string) (*KPKG, error) {
 }
 
 func (k *KPKG) ReadMetadata() error {
+	k.resetReader()
+
 	k.mu.Lock()
 	defer k.mu.Unlock()
+
 	if k.Manifest != nil {
 		return nil
 	}
@@ -124,4 +109,36 @@ func (k *KPKG) Close() error {
 		}
 	}
 	return err
+}
+
+func (k *KPKG) resetReader() error {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+
+	_, err := k.file.Seek(0, 0)
+	if err != nil {
+		return errors.AddStack(err)
+	}
+
+	var r io.Reader
+	r, err = xz.NewReader(k.file)
+	if err != nil {
+		slog.Debug("not xz compressed, trying gzip", "error", err)
+		_, err = k.file.Seek(0, 0)
+		if err != nil {
+			return errors.Wrapf(err, "k.file.Seek(0,0) for %q", k.path)
+		}
+		r, err = gzip.NewReader(k.file)
+		if err != nil {
+			slog.Debug("not gzip compressed, using raw file", "error", err)
+			_, err = k.file.Seek(0, 0)
+			if err != nil {
+				return errors.Wrapf(err, "k.file.Seek(0,0) for %q", k.path)
+			}
+			r = k.file
+		}
+	}
+	k.tarReader = tar.NewReader(r)
+	slog.Debug("resetReader completed successfully")
+	return nil
 }

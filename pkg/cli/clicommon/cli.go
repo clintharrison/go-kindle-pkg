@@ -14,18 +14,19 @@ func GetRepoFromArgs(cmd *cobra.Command) (*repository.MultiRepository, error) {
 	if err != nil {
 		return nil, errors.Wrap(err, "failed to get repo URLs")
 	}
-	fmt.Fprint(cmd.OutOrStdout(), "Using packages from repositories:\n") //nolint:errcheck
-	for _, u := range repoURLs {
-		fmt.Fprintf(cmd.OutOrStdout(), "  - %s\n", u) //nolint:errcheck
-	}
 
-	repo, err := repository.NewFromURLs(repoURLs...)
-	if err != nil {
-		fmt.Fprintf(cmd.OutOrStderr(), //nolint:errcheck
-			"ERROR: Unable to create repositories:\n%v\n",
-			err)
-		return nil, errors.Wrap(err, "failed to create repository from URLs")
+	var rs []repository.Repository
+	for _, url := range repoURLs {
+		r, err := repository.NewHTTPRepository(url)
+		if err != nil {
+			fmt.Fprintf(cmd.OutOrStderr(), //nolint:errcheck
+				"ERROR: Unable to create repository for URL %s:\n%v\n",
+				url, err)
+			return nil, errors.Wrapf(err, "failed to create repository for URL %s", url)
+		}
+		rs = append(rs, r)
 	}
+	repo := repository.NewMultiRepository(rs...)
 	return repo, nil
 }
 

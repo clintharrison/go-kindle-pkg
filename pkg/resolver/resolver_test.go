@@ -33,8 +33,8 @@ func mkMinMaxC(
 	return &Constraint{ID: ArtifactID(id), RepositoryID: nil, Min: &minSV, Max: &maxSV}
 }
 
-func mkPkgA(id string, major, minor, patch int, deps ...*Constraint) *Artifact {
-	return &Artifact{
+func mkPkgA(id string, major, minor, patch int, deps ...*Constraint) *VersionedPackage {
+	return &VersionedPackage{
 		ID:           ArtifactID(id),
 		RepositoryID: "",
 		Version:      mkSV(major, minor, patch),
@@ -47,22 +47,22 @@ func TestResolver(t *testing.T) {
 	tests := []struct {
 		name string
 		// input
-		universe        []*Artifact
+		universe        []*VersionedPackage
 		desiredPackages []*Constraint
 		// output
-		expected    []*Artifact
+		expected    []*VersionedPackage
 		expectError bool
 	}{
 		{
 			name: "matches highest possible version",
-			universe: []*Artifact{
+			universe: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0),
 				mkPkgA("pkgA", 1, 1, 0),
 			},
 			desiredPackages: []*Constraint{
 				mkMinC("pkgA", 1, 0, 0),
 			},
-			expected: []*Artifact{
+			expected: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 1, 0),
 			},
 			expectError: false,
@@ -70,7 +70,7 @@ func TestResolver(t *testing.T) {
 
 		{
 			name: "matches only possible version",
-			universe: []*Artifact{
+			universe: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0),
 				mkPkgA("pkgA", 1, 1, 0),
 				mkPkgA("pkgB", 1, 1, 0),
@@ -79,7 +79,7 @@ func TestResolver(t *testing.T) {
 			desiredPackages: []*Constraint{
 				mkMinC("pkgB", 1, 1, 0),
 			},
-			expected: []*Artifact{
+			expected: []*VersionedPackage{
 				mkPkgA("pkgB", 1, 1, 0),
 			},
 			expectError: false,
@@ -87,7 +87,7 @@ func TestResolver(t *testing.T) {
 
 		{
 			name: "matches version with max constraint",
-			universe: []*Artifact{
+			universe: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0),
 				mkPkgA("pkgA", 1, 1, 0),
 			},
@@ -95,7 +95,7 @@ func TestResolver(t *testing.T) {
 				mkMinC("pkgA", 0, 0, 0),
 				mkMaxC("pkgA", 1, 1, 0),
 			},
-			expected: []*Artifact{
+			expected: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0),
 			},
 			expectError: false,
@@ -103,7 +103,7 @@ func TestResolver(t *testing.T) {
 
 		{
 			name: "includes the latest dependency",
-			universe: []*Artifact{
+			universe: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0, mkMinC("libdep", 2, 0, 0)),
 				mkPkgA("libdep", 2, 0, 0),
 				mkPkgA("libdep", 2, 0, 10),
@@ -112,7 +112,7 @@ func TestResolver(t *testing.T) {
 				// 0.0.0 is a request for the latest version
 				mkMinC("pkgA", 0, 0, 0),
 			},
-			expected: []*Artifact{
+			expected: []*VersionedPackage{
 				mkPkgA("pkgA", 1, 0, 0, mkMinC("libdep", 2, 0, 0)),
 				mkPkgA("libdep", 2, 0, 10),
 			},
@@ -121,7 +121,7 @@ func TestResolver(t *testing.T) {
 
 		{
 			name: "reproduces sample repo JSON",
-			universe: []*Artifact{
+			universe: []*VersionedPackage{
 				mkPkgA(
 					"com.kindlemodding.examplepackage",
 					1, 2, 3,
@@ -180,7 +180,7 @@ func TestResolver(t *testing.T) {
 			desiredPackages: []*Constraint{
 				mkMinC("com.kindlemodding.examplepackage", 1, 2, 3),
 			},
-			expected: []*Artifact{
+			expected: []*VersionedPackage{
 				mkPkgA("com.kindlemodding.examplepackage", 1, 2, 3),
 				mkPkgA("testmax", 0, 99, 99),
 				mkPkgA("io.github.niluje.fbink", 0, 6, 11),
@@ -203,18 +203,18 @@ func TestResolver(t *testing.T) {
 			// for the sake of these tests, we don't care about the dependencies when we're checking
 			// the result set, just the IDs and Versions.
 			// (this makes writing the expected results easier)
-			expectedList := []Artifact{}
+			expectedList := []VersionedPackage{}
 			for _, a := range tt.expected {
-				expectedList = append(expectedList, Artifact{
+				expectedList = append(expectedList, VersionedPackage{
 					ID:           a.ID,
 					Version:      a.Version,
 					RepositoryID: "",
 					Dependencies: nil,
 				})
 			}
-			resultList := []Artifact{}
+			resultList := []VersionedPackage{}
 			for _, a := range result {
-				resultList = append(resultList, Artifact{
+				resultList = append(resultList, VersionedPackage{
 					ID:           a.ID,
 					Version:      a.Version,
 					RepositoryID: "",

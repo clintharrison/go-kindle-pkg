@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/clintharrison/go-kindle-pkg/pkg/cli/clicommon"
@@ -33,6 +34,22 @@ func NewCommand() *cobra.Command {
 			if err != nil {
 				return errors.Wrap(err, "failed to initialize repository")
 			}
+
+			fileArgs, rest, err := findFileArgs(args)
+			if err != nil {
+				return errors.Wrap(err, "failed to parse file arguments")
+			}
+
+			// Create a local file repository for the .kpkg files specified on the command line
+			repo.AddRepository(repository.NewLocalFileRepository(fileArgs...))
+
+			// read metadata from .kpkg files to generate constraints and artifacts
+			// used for resolution
+			fileConstraints, err := processKPKGArgs(fileArgs)
+			if err != nil {
+				return err
+			}
+
 			packages, err := repo.FetchPackages(cmd.Context())
 			if err != nil {
 				fmt.Fprintf( //nolint:errcheck
@@ -45,18 +62,6 @@ func NewCommand() *cobra.Command {
 
 			res := resolver.NewResolverForRepositoryPackages(packages)
 
-			fileArgs, rest, err := findFileArgs(args)
-			if err != nil {
-				return errors.Wrap(err, "failed to parse file arguments")
-			}
-
-			// read metadata from .kpkg files to generate constraints and artifacts
-			// used for resolution
-			fileConstraints, fileArtifacts, err := processKPKGArgs(fileArgs)
-			if err != nil {
-				return err
-			}
-
 			// parse the human-friendly-ish constraints that remain on the command line
 			constraints, err := clicommon.ConstraintsFromArgs(rest)
 			if err != nil {
@@ -65,7 +70,7 @@ func NewCommand() *cobra.Command {
 
 			constraints = append(fileConstraints, constraints...)
 
-			result, err := res.Resolve(constraints, resolver.WithArtifacts(fileArtifacts))
+			result, err := res.Resolve(constraints)
 			if err != nil {
 				fmt.Fprintf(cmd.OutOrStderr(), "ERROR: Unable to resolve packages:\n%v\n", err) //nolint:errcheck
 				return errors.Wrap(err, "failed to resolve packages")
@@ -78,7 +83,7 @@ func NewCommand() *cobra.Command {
 				return errors.Wrap(err, "failed to get installed packages")
 			}
 
-			installedMap := make(map[resolver.ArtifactID]*resolver.Artifact)
+			installedMap := make(map[resolver.ArtifactID]*resolver.VersionedPackage)
 			for _, art := range installed {
 				installedMap[art.ID] = art
 			}
@@ -149,6 +154,7 @@ func performPackageChanges(
 			if err != nil {
 				return err
 			}
+			fmt.Printf("\033[1m%s:\033[0m installed successfully\n", rp.ID)
 		}
 	}
 	if dryRun {
@@ -221,7 +227,7 @@ func downloadAndUnpack(
 	slog.Debug("downloadPackage()", "kpkgPath", kpkgPath)
 	err = repo.DownloadPackage(ctx, rp, kpkgPath, dryRun)
 	if err != nil {
-		return errors.Wrapf(err, "failed to download package %s", rp)
+		return err
 	}
 
 	if dryRun {
@@ -233,6 +239,7 @@ func downloadAndUnpack(
 		return errors.Wrapf(err, "kpkg.Open(%q)", kpkgPath)
 	}
 	defer func() { _ = kpkgFile.Close() }()
+	slog.Debug("extracting KPKG", "kpkg", kpkgPath, "destDir", destDir, "package", kpkgFile.Manifest)
 
 	err = kpkgFile.ExtractAll(ctx, destDir, false, os.Stdout)
 	if err != nil {
@@ -243,32 +250,34 @@ func downloadAndUnpack(
 }
 
 func addPackage(ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, dryRun bool) error {
-	var err error
 	baseDir := version.BaseDir()
-	pkgDir := fmt.Sprintf("%s-%d.%d.%d", rp.ID, rp.Version.Major, rp.Version.Minor, rp.Version.Patch)
-	fullPath := fmt.Sprintf("%s/%s", baseDir, pkgDir)
-	tmpDirPath := fmt.Sprintf("%s/tmp/%s", baseDir, pkgDir)
+	// TODO: is this desirable? It means you can't assume you're in /mnt/us/kpm/pkgs/$name/, which
+	// could be useful if absolute paths are needed somewhere.
+	// pkgDirName := fmt.Sprintf("%s-%d.%d.%d", rp.ID, rp.Version.Major, rp.Version.Minor, rp.Version.Patch)
+	pkgDirName := rp.ID
+	pkgsDir := filepath.Join(baseDir, "pkgs")
+	destDir := filepath.Join(pkgsDir, pkgDirName)
 
-	// unpack to $baseDir/tmp/pkgDir
-	// mv tmp/pkgDir to $baseDir/pkgDir
-	// TODO: make this the download dir from the CLI args
-	slog.Debug("downloadAndUnpack()", "rp", rp, "tmpPath", tmpDirPath, "dryRun", dryRun)
-	err = downloadAndUnpack(ctx, repo, rp, tmpDirPath, dryRun)
+	slog.Debug("downloadAndUnpack()", "rp", rp, "destDir", destDir, "dryRun", dryRun)
+	err := downloadAndUnpack(ctx, repo, rp, destDir, dryRun)
 	if err != nil {
 		return errors.Wrapf(err, "failed to stage package %s", rp)
 	}
 
-	err = os.Rename(fmt.Sprintf("%s/tmp/%s", baseDir, pkgDir), fullPath)
-	if err != nil {
-		return errors.Wrapf(err, "failed to move package to final location %s", fullPath)
+	installerPath := destDir + "/install.sh"
+	if _, err := os.Stat(installerPath); os.IsNotExist(err) {
+		slog.Debug("no install script for package %q", "path", rp.ID)
+		return nil
 	}
-
-	installerPath := fullPath + "/install.sh"
 
 	fmt.Printf("Running install script for %s (version %s)\n", rp.ID, rp.Version.String())
 
-	// TODO: cd to fullPath
 	cmd := exec.CommandContext(ctx, "/bin/sh", "-l", installerPath)
+	cmd.Env = append(cmd.Env, os.Environ()...)
+	cmd.Env = append(cmd.Env, fmt.Sprintf("KPM_INSTALL_DIR=%s", destDir))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("KPM_BASE_DIR=%s", baseDir))
+	cmd.Env = append(cmd.Env, fmt.Sprintf("KPM_USERSTORE_DIR=%s", version.UserstoreDir()))
+	cmd.Dir = destDir
 	cmd.Stdout = os.Stdout
 	cmd.Stderr = os.Stderr
 	if dryRun {
@@ -277,60 +286,38 @@ func addPackage(ctx context.Context, repo repository.Repository, rp *repository.
 		err = cmd.Run()
 	}
 	if err != nil {
-		return fmt.Errorf("failed to install package %q: %w", fullPath, err)
+		return fmt.Errorf("failed to install package %q: %w", installerPath, err)
 	}
 	return nil
 }
 
-func getInstalledPackages() ([]*resolver.Artifact, error) {
+func getInstalledPackages() ([]*resolver.VersionedPackage, error) {
 	// TODO: discover packages in the base dir
 	// TODO: discover external packages like /mnt/us/extensions/koreader
-	return []*resolver.Artifact{}, nil
+	return []*resolver.VersionedPackage{}, nil
 }
 
-func processKPKGArgs(fileArgs []string) ([]*resolver.Constraint, []*resolver.Artifact, error) {
+func processKPKGArgs(fileArgs []string) ([]*resolver.Constraint, error) {
 	var manifests []*manifest.Manifest
 	for _, f := range fileArgs {
 		kpkg, err := kpkg.Open(f)
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "kpkg.OpenKPKGFile(%q)", f)
+			return nil, errors.Wrapf(err, "kpkg.OpenKPKGFile(%q)", f)
 		}
 		defer kpkg.Close() //nolint:errcheck
 		pkgManifest := kpkg.Manifest
 		if pkgManifest == nil {
-			return nil, nil, fmt.Errorf("kpkg %q has no manifest", f)
+			return nil, fmt.Errorf("kpkg %q has no manifest", f)
 		}
 		manifests = append(manifests, pkgManifest)
 	}
 
 	constraints, err := constraintsFromKPKGFiles(manifests)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "failed to generate constraints from .kpkg files")
+		return nil, errors.Wrap(err, "failed to generate constraints from .kpkg files")
 	}
 
-	var artifacts []*resolver.Artifact
-	for _, pkgManifest := range manifests {
-		var deps []*resolver.Constraint
-		// TODO: is this right? Should dependencies be an array (not a map) in the manifest,
-		// mirroring the shape of repository manifests?
-		for depID, dep := range pkgManifest.Dependencies {
-			deps = append(deps, &resolver.Constraint{
-				ID:           resolver.ArtifactID(depID),
-				Min:          dep.Min,
-				Max:          dep.Max,
-				RepositoryID: (*resolver.RepositoryID)(dep.RepositoryID),
-			})
-		}
-		art := &resolver.Artifact{
-			ID:           resolver.ArtifactID(pkgManifest.ID),
-			RepositoryID: "$kpkgfile",
-			Version:      pkgManifest.Version,
-			Dependencies: deps,
-		}
-		artifacts = append(artifacts, art)
-	}
-
-	return constraints, artifacts, nil
+	return constraints, nil
 }
 
 // findFileArgs separates .kpkg file arguments from version constraint (foo=1.2.3) arguments.

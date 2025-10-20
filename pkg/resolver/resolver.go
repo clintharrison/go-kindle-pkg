@@ -15,7 +15,7 @@ type (
 	RepositoryID string
 )
 
-type Artifact struct {
+type VersionedPackage struct {
 	ID           ArtifactID
 	RepositoryID RepositoryID
 	// version is not optional!
@@ -23,7 +23,7 @@ type Artifact struct {
 	Dependencies []*Constraint
 }
 
-func (a *Artifact) String() string {
+func (a *VersionedPackage) String() string {
 	return fmt.Sprintf("%s-%d.%d.%d", a.ID, a.Version.Major, a.Version.Minor, a.Version.Patch)
 }
 
@@ -39,7 +39,7 @@ type Constraint struct {
 
 // Allows checks whether an artifact matches this constraint.
 // TODO: Move this to an interface method and out of the resolver package; Constraint can be generic perhaps?
-func (c *Constraint) Allows(art *Artifact) bool {
+func (c *Constraint) Allows(art *VersionedPackage) bool {
 	if c.Min != nil && art.Version.Compare(*c.Min) < 0 {
 		return false
 	}
@@ -65,12 +65,12 @@ func (c *Constraint) String() string {
 }
 
 type Resolver struct {
-	packages         map[ArtifactID][]*Artifact
+	packages         map[ArtifactID][]*VersionedPackage
 	preferMaxVersion bool
 }
 
 func NewResolverForRepositoryPackages(packages []*repository.RepoPackage) *Resolver {
-	var res []*Artifact
+	var res []*VersionedPackage
 	for _, pa := range packages {
 		ds := make([]*Constraint, len(pa.Dependencies))
 		for i, d := range pa.Dependencies {
@@ -85,7 +85,7 @@ func NewResolverForRepositoryPackages(packages []*repository.RepoPackage) *Resol
 				RepositoryID: rid,
 			}
 		}
-		ra := &Artifact{
+		ra := &VersionedPackage{
 			ID:           ArtifactID(pa.ID),
 			RepositoryID: RepositoryID(pa.RepositoryID),
 			Version:      pa.Version,
@@ -96,9 +96,9 @@ func NewResolverForRepositoryPackages(packages []*repository.RepoPackage) *Resol
 	return NewResolver(res)
 }
 
-func NewResolver(universe []*Artifact) *Resolver {
+func NewResolver(universe []*VersionedPackage) *Resolver {
 	r := &Resolver{
-		packages: make(map[ArtifactID][]*Artifact),
+		packages: make(map[ArtifactID][]*VersionedPackage),
 		// candidates are sorted descending by version
 		preferMaxVersion: true,
 	}
@@ -115,27 +115,27 @@ func NewResolver(universe []*Artifact) *Resolver {
 }
 
 type options struct {
-	fileArtifacts []*Artifact
+	fileArtifacts []*VersionedPackage
 }
 
 type OptionFunc func(*options)
 
-func WithArtifacts(artifacts []*Artifact) OptionFunc {
+func WithArtifacts(artifacts []*VersionedPackage) OptionFunc {
 	return func(o *options) {
 		o.fileArtifacts = artifacts
 	}
 }
 
-func (r *Resolver) Resolve(constraints []*Constraint, opts ...OptionFunc) (map[ArtifactID]*Artifact, error) {
+func (r *Resolver) Resolve(constraints []*Constraint, opts ...OptionFunc) (map[ArtifactID]*VersionedPackage, error) {
 	options := &options{
-		fileArtifacts: []*Artifact{},
+		fileArtifacts: []*VersionedPackage{},
 	}
 	for _, opt := range opts {
 		opt(options)
 	}
 
 	// initial empty state
-	resolved := map[ArtifactID]*Artifact{}
+	resolved := map[ArtifactID]*VersionedPackage{}
 
 	// well, maybe not that empty
 	for _, a := range options.fileArtifacts {
@@ -153,8 +153,8 @@ func (r *Resolver) Resolve(constraints []*Constraint, opts ...OptionFunc) (map[A
 // resolvedRecursive takes the remaining unresolved constraints and the current resolved map,
 // and attempts to resolve all constraints recursively, returning the final resolved map or an error.
 func (r *Resolver) resolveRecursive(
-	constraints []*Constraint, resolved map[ArtifactID]*Artifact,
-) (map[ArtifactID]*Artifact, bool) {
+	constraints []*Constraint, resolved map[ArtifactID]*VersionedPackage,
+) (map[ArtifactID]*VersionedPackage, bool) {
 	slog.Debug("resolveRecursive called", "constraints", constraints, "resolved", resolved)
 	if len(constraints) == 0 {
 		// no more constraints :)
@@ -182,9 +182,9 @@ func (r *Resolver) resolveRecursive(
 
 	// candidate list is ordered descending by version (by default)
 	// TODO: consider repository order -- which must always be descending priority?
-	candidates := make([]*Artifact, len(r.packages[cid]))
+	candidates := make([]*VersionedPackage, len(r.packages[cid]))
 	copy(candidates, r.packages[cid])
-	slices.SortFunc(candidates, func(a, b *Artifact) int {
+	slices.SortFunc(candidates, func(a, b *VersionedPackage) int {
 		if r.preferMaxVersion {
 			return b.Version.Compare(a.Version)
 		}
@@ -218,9 +218,9 @@ func (r *Resolver) resolveRecursive(
 	return nil, false
 }
 
-func DiffInstallations(current, desired map[ArtifactID]*Artifact) ([]*Artifact, []*Artifact) {
-	var add []*Artifact
-	var rm []*Artifact
+func DiffInstallations(current, desired map[ArtifactID]*VersionedPackage) ([]*VersionedPackage, []*VersionedPackage) {
+	var add []*VersionedPackage
+	var rm []*VersionedPackage
 
 	for id, dart := range desired {
 		if cart, ok := current[id]; ok {

@@ -12,6 +12,8 @@ const (
 	Version     = "0.0.1"
 )
 
+var logged = false
+
 func BaseDir() string {
 	hostname, err := os.Hostname()
 	if err == nil && hostname == "kindle" {
@@ -20,7 +22,20 @@ func BaseDir() string {
 	// for non-Kindle testing, use a temp directory
 	tmpDir := os.TempDir()
 	baseDir := tmpDir + "/kpmbase"
-	slog.Info("using temporary base dir for non-Kindle host", "baseDir", baseDir)
-	os.RemoveAll(baseDir)
+	if !logged {
+		logged = true
+		slog.Info("Running on non-Kindle device; using temporary base directory", "baseDir", baseDir)
+	}
 	return baseDir
+}
+
+func UserstoreDir() string {
+	hostname, err := os.Hostname()
+	if err == nil && hostname == "kindle" {
+		return "/mnt/us"
+	}
+	// for non-Kindle testing, use a temp directory
+	dir := BaseDir() + "/userstore"
+	os.MkdirAll(dir, 0o755)
+	return dir
 }
