@@ -12,6 +12,7 @@ import (
 
 	"github.com/clintharrison/go-kindle-pkg/pkg/kpkg"
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
+	"github.com/clintharrison/go-kindle-pkg/pkg/utilio"
 	"github.com/clintharrison/go-kindle-pkg/pkg/version"
 	"github.com/pingcap/errors"
 )
@@ -95,24 +96,6 @@ func (r *LocalFileRepository) ID() string {
 	return localFileRepoID
 }
 
-type contextReader struct {
-	ctx context.Context //nolint:containedctx
-	r   io.Reader
-}
-
-func newContextReader(ctx context.Context, r io.Reader) *contextReader {
-	return &contextReader{ctx, r}
-}
-
-func (r *contextReader) Read(p []byte) (int, error) {
-	select {
-	case <-r.ctx.Done():
-		return 0, r.ctx.Err() //nolint:wrapcheck
-	default:
-		return r.r.Read(p) //nolint:wrapcheck
-	}
-}
-
 func (r *LocalFileRepository) DownloadPackage(
 	ctx context.Context, pkg *RepoPackage, destPath string, dryRun bool,
 ) error {
@@ -140,7 +123,7 @@ func (r *LocalFileRepository) DownloadPackage(
 	}
 	defer outFile.Close()
 
-	_, err = io.Copy(outFile, newContextReader(ctx, src))
+	_, err = io.Copy(outFile, utilio.NewContextReader(ctx, src))
 	if err != nil {
 		return errors.Wrapf(err, "io.Copy() to %q", destPath)
 	}

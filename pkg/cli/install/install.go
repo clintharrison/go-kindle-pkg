@@ -3,6 +3,8 @@ package install
 import (
 	"context"
 	"fmt"
+	"io"
+	"io/fs"
 	"log/slog"
 	"os"
 	"os/exec"
@@ -250,14 +252,66 @@ func downloadAndUnpack(
 		return errors.Wrapf(err, "kpkg.Open(%q)", kpkgPath)
 	}
 	defer func() { _ = kpkgFile.Close() }()
-	slog.Debug("extracting KPKG", "kpkg", kpkgPath, "destDir", destDir, "package", kpkgFile.Manifest)
 
-	err = kpkgFile.ExtractAll(ctx, destDir, false, os.Stdout)
+	tmpDir, err := os.MkdirTemp("", "kpm-extract-"+kpkgFile.Manifest.ID)
 	if err != nil {
-		return errors.Wrapf(err, "kpkg.ExtractAll(%q, %q)", rp, destDir)
+		return errors.Wrapf(err, "os.MkdirTemp()")
 	}
+	defer func() {
+		_ = os.RemoveAll(tmpDir)
+	}()
+	slog.Debug("extracting KPKG", "kpkg", kpkgPath, "destDir", tmpDir, "package", kpkgFile.Manifest)
+
+	err = kpkgFile.ExtractAll(ctx, tmpDir, false, os.Stdout)
+	if err != nil {
+		return errors.Wrapf(err, "kpkg.ExtractAll(%q, %q)", rp, tmpDir)
+	}
+	copyDirSafe(tmpDir, destDir)
 
 	return nil
+}
+
+func copyDirSafe(srcDir, destDir string) error {
+	srcFS := os.DirFS(srcDir)
+	return fs.WalkDir(srcFS, ".", func(srcPath string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return errors.AddStack(err)
+		}
+		destPath := filepath.Join(destDir, srcPath)
+		slog.Debug("copyDirSafe()", "srcPath", srcPath, "destPath", destPath)
+
+		switch d.Type() & fs.ModeType {
+		case fs.ModeSymlink:
+			slog.Warn("link copying is not supported on /mnt/us, skipping", "path", srcPath)
+			return nil
+		case fs.ModeDir:
+			err := os.MkdirAll(destPath, 0o755) //nolint:gosec
+			if err != nil {
+				return errors.Wrapf(err, "os.MkdirAll(%q)", destPath)
+			}
+			return nil
+		case 0: // regular file
+			srcFile, err := os.Open(filepath.Join(srcDir, srcPath))
+			if err != nil {
+				return errors.Wrapf(err, "os.Open(%q)", srcPath)
+			}
+			defer srcFile.Close()
+
+			destFile, err := os.Create(destPath)
+			if err != nil {
+				return errors.Wrapf(err, "os.Create(%q)", destPath)
+			}
+			defer destFile.Close()
+
+			_, err = io.Copy(destFile, srcFile)
+			if err != nil {
+				return errors.Wrapf(err, "io.Copy(%q, %q)", srcPath, destPath)
+			}
+		default:
+			slog.Warn("unsupported file type, skipping", "path", srcPath, "type", d.Type())
+		}
+		return nil
+	})
 }
 
 func addPackage(ctx context.Context, repo repository.Repository, rp *repository.RepoPackage, dryRun bool) error {
