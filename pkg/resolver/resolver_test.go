@@ -232,6 +232,7 @@ func TestResolver(t *testing.T) {
 func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 	t.Parallel()
 
+	//nolint:exhaustruct
 	tt := []struct {
 		name        string
 		universe    []*VersionedPackage

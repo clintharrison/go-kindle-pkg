@@ -258,7 +258,7 @@ func sortedChangeOrder(changes []*VersionedPackage) []*VersionedPackage {
 	}
 	graph := make(map[ArtifactID]*node)
 	for _, art := range changes {
-		graph[art.ID] = &node{art: art}
+		graph[art.ID] = &node{art: art, children: nil}
 	}
 	for _, n := range graph {
 		for _, dep := range n.art.Dependencies {
