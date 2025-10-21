@@ -1,0 +1,39 @@
+{
+    "items": [
+        {
+            "name": "kpmgo",
+            "exitmenu": false,
+            "items": [
+                {
+                    "name": "Reload menu",
+                    "action": "./extension.sh",
+                    "params": "reload-menu",
+                    "exitmenu": false,
+                    "refresh": true
+                },
+                {
+                    "name": "Modify installed packages",
+                    "exitmenu": false,
+                    "items": [
+                        {
+                            "name": "Uninstall kterm",
+                            "action": "./extension.sh",
+                            "params": "uninstall kterm",
+                            "exitmenu": true,
+                            "checked": true,
+                            "internal": "status Uninstalling kterm..."
+                        },
+                        {
+                            "name": "Install pfetch",
+                            "action": "./extension.sh",
+                            "params": "install pfetch",
+                            "exitmenu": true,
+                            "checked": true,
+                            "internal": "status Installing pfetch..."
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}
