@@ -6,6 +6,7 @@ import (
 	"github.com/clintharrison/go-kindle-pkg/pkg/cli/install"
 	"github.com/clintharrison/go-kindle-pkg/pkg/cli/launch"
 	"github.com/clintharrison/go-kindle-pkg/pkg/cli/list"
+	"github.com/clintharrison/go-kindle-pkg/pkg/cli/reloadmenu"
 	"github.com/clintharrison/go-kindle-pkg/pkg/cli/resolve"
 	"github.com/clintharrison/go-kindle-pkg/pkg/version"
 	"github.com/spf13/cobra"
@@ -32,6 +33,7 @@ func NewRootCmd() *cobra.Command {
 	cmd.AddCommand(install.NewCommand())
 	cmd.AddCommand(launch.NewCommand())
 	cmd.AddCommand(list.NewCommand())
+	cmd.AddCommand(reloadmenu.NewCommand())
 	cmd.AddCommand(resolve.NewCommand())
 
 	return cmd
