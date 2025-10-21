@@ -2,21 +2,27 @@
 
 set -eu
 
-case "$1" in
-reload-menu)
+reload_menu() {
 	if /mnt/us/kpmgo reload-menu >/mnt/us/extensions/kpmgo/menu.json.tmp; then
 		mv /mnt/us/extensions/kpmgo/menu.json.tmp /mnt/us/extensions/kpmgo/menu.json
 	else
 		echo "Failed to generate kpmgo menu" >&2
 	fi
+}
+
+case "$1" in
+reload-menu)
+	reload_menu
 	;;
 install)
 	package="$2"
 	/mnt/us/kpmgo install "$package"
+	reload_menu
 	;;
 uninstall)
 	package="$2"
-	/mnt/us/kpmgo uninstall "$package"
+	/mnt/us/kpmgo uninstall "$package" >>/tmp/kpmgo-uninstall.log 2>&1
+	reload_menu
 	;;
 launch)
 	package="$2"

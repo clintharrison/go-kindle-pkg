@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"path/filepath"
 
 	"github.com/clintharrison/go-kindle-pkg/pkg/kpkg"
 	"github.com/clintharrison/go-kindle-pkg/pkg/repository/manifest"
@@ -72,7 +73,7 @@ type Repository interface {
 	DownloadPackage(ctx context.Context, repoPackage *RepoPackage, destFile string, dryRun bool) error
 }
 
-const localFileRepoID = "$kpkgfile"
+const LocalFileRepoID = "$kpkgfile"
 
 type LocalFileRepository struct {
 	paths          []string
@@ -93,7 +94,7 @@ func (r *LocalFileRepository) String() string {
 }
 
 func (r *LocalFileRepository) ID() string {
-	return localFileRepoID
+	return LocalFileRepoID
 }
 
 func (r *LocalFileRepository) DownloadPackage(
@@ -136,20 +137,31 @@ func (r *LocalFileRepository) FetchPackages(ctx context.Context) ([]*RepoPackage
 		if err != nil {
 			return nil, errors.Wrapf(err, "os.Stat(%q)", p)
 		}
-		if fi.IsDir() {
-			// TODO: scan directory for .kpkg files?
-			continue
-		}
-		k, err := kpkg.Open(ctx, p)
-		if err != nil {
-			return nil, errors.Wrapf(err, "kpkg.Open(%q)", p)
-		}
-		defer k.Close() //nolint:errcheck
-		if k.Manifest == nil {
-			return nil, errors.Errorf("kpkg file %q does not have a manifest", p)
+		var manif *manifest.Manifest
+		if fi.IsDir() { //nolint:nestif
+			manifestPath := filepath.Join(p, "manifest.json")
+			data, err := os.ReadFile(manifestPath)
+			if err != nil {
+				slog.Warn("skipping invalid manifest.json", "path", manifestPath, "error", err)
+				continue
+			}
+			err = json.Unmarshal(data, &manif)
+			if err != nil {
+				return nil, errors.Wrapf(err, "json.Unmarshal() to manifest.Manifest")
+			}
+		} else {
+			k, err := kpkg.Open(ctx, p)
+			if err != nil {
+				return nil, errors.Wrapf(err, "kpkg.Open(%q)", p)
+			}
+			defer k.Close() //nolint:errcheck
+			if k.Manifest == nil {
+				return nil, errors.Errorf("kpkg file %q does not have a manifest", p)
+			}
+			manif = k.Manifest
 		}
 		deps := []manifest.Dependency{}
-		for dID, d := range k.Manifest.Dependencies {
+		for dID, d := range manif.Dependencies {
 			d := manifest.Dependency{
 				ID:           dID,
 				Min:          d.Min,
@@ -162,15 +174,15 @@ func (r *LocalFileRepository) FetchPackages(ctx context.Context) ([]*RepoPackage
 		artifact := &manifest.Artifact{
 			URL: p,
 			Version: manifest.SemanticVersion{
-				Major: k.Manifest.Version.Major,
-				Minor: k.Manifest.Version.Minor,
-				Patch: k.Manifest.Version.Patch,
+				Major: manif.Version.Major,
+				Minor: manif.Version.Minor,
+				Patch: manif.Version.Patch,
 			},
-			SupportedArch: k.Manifest.SupportedArch,
+			SupportedArch: manif.SupportedArch,
 			Dependencies:  deps,
 		}
-		r.pkgs = append(r.pkgs, NewRepoPackage(k.Manifest.ID, localFileRepoID, artifact))
-		r.pathForPackage[k.Manifest.ID] = p
+		r.pkgs = append(r.pkgs, NewRepoPackage(manif.ID, LocalFileRepoID, artifact))
+		r.pathForPackage[manif.ID] = p
 	}
 
 	return r.pkgs, nil

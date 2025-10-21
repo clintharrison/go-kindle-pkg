@@ -17,24 +17,24 @@ func NewCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "reload-menu",
 		Short: "Regenerate the KUAL menu.json",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			installedPkgs, err := state.GetInstalledPackages()
 			if err != nil {
-				return err
+				return errors.AddStack(err)
 			}
 
-			menu, err := generateMenuJSON(installedPkgs)
+			menu := generateMenuJSON(installedPkgs)
 			if err != nil {
-				return err
+				return errors.AddStack(err)
 			}
 			menuJSON, err := json.MarshalIndent(menu, "", "  ")
 			if err != nil {
-				return err
+				return errors.AddStack(err)
 			}
 
 			write, err := cmd.Flags().GetBool("write")
 			if err != nil {
-				return err
+				return errors.AddStack(err)
 			}
 			if write {
 				menuPath := filepath.Join(version.UserstoreDir(), "extensions", "kpmgo", "menu.json")
@@ -49,7 +49,10 @@ func NewCommand() *cobra.Command {
 				}
 				slog.Info("regenerated menu.json written", "path", menuPath)
 			} else {
-				cmd.OutOrStdout().Write(menuJSON)
+				_, err = cmd.OutOrStdout().Write(menuJSON)
+				if err != nil {
+					return errors.AddStack(err)
+				}
 			}
 			return nil
 		},
@@ -73,7 +76,8 @@ type KUALMenuItem struct {
 	Items    []*KUALMenuItem `json:"items,omitempty"`
 }
 
-func generateMenuJSON(installedPkgs map[string][]*repository.RepoPackage) (*KUALMenu, error) {
+//nolint:exhaustruct
+func generateMenuJSON(installedPkgs map[string][]*repository.RepoPackage) *KUALMenu {
 	rootMenu := &KUALMenu{}
 	menu := KUALMenuItem{
 		Name:  "kpmgo",
@@ -97,7 +101,8 @@ func generateMenuJSON(installedPkgs map[string][]*repository.RepoPackage) (*KUAL
 			Action:   "./extension.sh",
 			Params:   "uninstall " + pkgID,
 			Checked:  true,
-			ExitMenu: true,
+			ExitMenu: false,
+			Refresh:  true,
 			Internal: "status Uninstalling " + pkgID + "...",
 		})
 	}
@@ -108,7 +113,7 @@ func generateMenuJSON(installedPkgs map[string][]*repository.RepoPackage) (*KUAL
 
 	menu.Items = append(menu.Items, getLaunchItems(installedPkgs)...)
 
-	return rootMenu, nil
+	return rootMenu
 }
 
 func getLaunchItems(installedPkgs map[string][]*repository.RepoPackage) []*KUALMenuItem {
@@ -120,7 +125,7 @@ func getLaunchItems(installedPkgs map[string][]*repository.RepoPackage) []*KUALM
 			slog.Debug("no launch.sh for package, skipping launch menu item", "package", pkgID, "path", launchPath)
 			continue
 		}
-		launchItems = append(launchItems, &KUALMenuItem{
+		launchItems = append(launchItems, &KUALMenuItem{ //nolint:exhaustruct
 			Name:     "Launch " + pkgID,
 			Action:   "./extension.sh",
 			Params:   "launch " + pkgID,

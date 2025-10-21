@@ -41,6 +41,9 @@ type Constraint struct {
 // Allows checks whether an artifact matches this constraint.
 // TODO: Move this to an interface method and out of the resolver package; Constraint can be generic perhaps?
 func (c *Constraint) Allows(art *VersionedPackage) bool {
+	if c.ID != art.ID {
+		return false
+	}
 	if c.Min != nil && art.Version.Compare(*c.Min) < 0 {
 		return false
 	}
@@ -108,29 +111,29 @@ func NewResolver(universe []*VersionedPackage) *Resolver {
 		r.packages[a.ID] = append(r.packages[a.ID], a)
 	}
 	slog.Debug("resolver packages", "count", len(universe))
-	for _, p := range r.packages {
-		for _, v := range p {
-			slog.Debug("package version", "package", v.ID, "version", v, "dependencies", v.Dependencies)
-		}
-	}
+	// for _, p := range r.packages {
+	// 	for _, v := range p {
+	// 		slog.Debug("package version", "package", v.ID, "version", v, "dependencies", v.Dependencies)
+	// 	}
+	// }
 	return r
 }
 
 type options struct {
-	fileArtifacts []*VersionedPackage
+	existingArtifacts []*VersionedPackage
 }
 
 type OptionFunc func(*options)
 
 func WithArtifacts(artifacts []*VersionedPackage) OptionFunc {
 	return func(o *options) {
-		o.fileArtifacts = artifacts
+		o.existingArtifacts = artifacts
 	}
 }
 
 func (r *Resolver) Resolve(constraints []*Constraint, opts ...OptionFunc) (map[ArtifactID]*VersionedPackage, error) {
 	options := &options{
-		fileArtifacts: []*VersionedPackage{},
+		existingArtifacts: []*VersionedPackage{},
 	}
 	for _, opt := range opts {
 		opt(options)
@@ -140,8 +143,7 @@ func (r *Resolver) Resolve(constraints []*Constraint, opts ...OptionFunc) (map[A
 	resolved := map[ArtifactID]*VersionedPackage{}
 
 	// well, maybe not that empty
-	for _, a := range options.fileArtifacts {
-		// they need to be in the universe (iow, they're not worth special casing in the resolver later)
+	for _, a := range options.existingArtifacts {
 		r.packages[a.ID] = append(r.packages[a.ID], a)
 	}
 
@@ -220,28 +222,30 @@ func (r *Resolver) resolveRecursive(
 	return nil, false
 }
 
-func DiffInstallations(current, desired map[ArtifactID]*VersionedPackage) ([]*VersionedPackage, []*VersionedPackage) {
-	// TODO: This needs to consider dependencies when determining the order to add/remove packages.
-	// We don't want to install a package until its dependencies are available, and we don't want
-	// to remove a package until all packages depending on it are removed.
-
+func DiffInstallations(
+	current map[ArtifactID][]*VersionedPackage, desired map[ArtifactID]*VersionedPackage,
+) ([]*VersionedPackage, []*VersionedPackage) {
 	var add []*VersionedPackage
 	var rm []*VersionedPackage
 
 	for id, dart := range desired {
-		if cart, ok := current[id]; ok {
-			if cart.Version.Compare(dart.Version) != 0 {
-				add = append(add, dart)
-				rm = append(rm, cart)
+		if carts, ok := current[id]; ok {
+			for _, cart := range carts {
+				if cart.Version.Compare(dart.Version) != 0 {
+					add = append(add, dart)
+					rm = append(rm, cart)
+				}
 			}
 		} else {
 			add = append(add, dart)
 		}
 	}
 
-	for id, art := range current {
-		if _, ok := desired[id]; !ok {
-			rm = append(rm, art)
+	for id, arts := range current {
+		for _, art := range arts {
+			if _, ok := desired[id]; !ok {
+				rm = append(rm, art)
+			}
 		}
 	}
 

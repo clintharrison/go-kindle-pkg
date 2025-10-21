@@ -19,19 +19,28 @@
                             "name": "Uninstall kterm",
                             "action": "./extension.sh",
                             "params": "uninstall kterm",
-                            "exitmenu": true,
+                            "exitmenu": false,
                             "checked": true,
-                            "internal": "status Uninstalling kterm..."
+                            "internal": "status Uninstalling kterm...",
+                            "refresh": true
                         },
                         {
-                            "name": "Install pfetch",
+                            "name": "Uninstall pfetch",
                             "action": "./extension.sh",
-                            "params": "install pfetch",
-                            "exitmenu": true,
+                            "params": "uninstall pfetch",
+                            "exitmenu": false,
                             "checked": true,
-                            "internal": "status Installing pfetch..."
+                            "internal": "status Uninstalling pfetch...",
+                            "refresh": true
                         }
                     ]
+                },
+                {
+                    "name": "Launch pfetch",
+                    "action": "./extension.sh",
+                    "params": "launch pfetch",
+                    "exitmenu": true,
+                    "internal": "status Launching pfetch..."
                 }
             ]
         }

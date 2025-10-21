@@ -43,5 +43,5 @@ func runLaunchScript(ctx context.Context, packageID string) error {
 	cmd.Stderr = os.Stderr
 	cmd.Stdin = os.Stdin
 	slog.Debug("running launch.sh", "path", scriptPath, "cmd", cmd.String())
-	return cmd.Run()
+	return cmd.Run() //nolint:wrapcheck
 }

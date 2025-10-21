@@ -30,7 +30,8 @@ func NewRootCmd() *cobra.Command {
 
 	cmd.AddCommand(createkpkg.NewCommand())
 	cmd.AddCommand(extract.NewCommand())
-	cmd.AddCommand(install.NewCommand())
+	cmd.AddCommand(install.NewInstallCommand())
+	cmd.AddCommand(install.NewUninstallCommand())
 	cmd.AddCommand(launch.NewCommand())
 	cmd.AddCommand(list.NewCommand())
 	cmd.AddCommand(reloadmenu.NewCommand())

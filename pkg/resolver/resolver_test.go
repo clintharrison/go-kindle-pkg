@@ -234,12 +234,13 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 
 	//nolint:exhaustruct
 	tt := []struct {
-		name        string
-		universe    []*VersionedPackage
-		current     map[ArtifactID]*VersionedPackage
-		constraints []*Constraint
-		expectedAdd []string
-		expectedRm  []string
+		name         string
+		universe     []*VersionedPackage
+		current      map[ArtifactID][]*VersionedPackage
+		constraints  []*Constraint
+		expectedAdd  []string
+		expectedRm   []string
+		expectedFunc func(require.TestingT, []string, []string)
 	}{
 		{
 			name: "simple linear dependencies",
@@ -296,8 +297,8 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 			constraints: []*Constraint{
 				mkMinC("pkgA", 1, 0, 0),
 			},
-			current: map[ArtifactID]*VersionedPackage{
-				ArtifactID("pkgC"): mkPkgA("pkgC", 0, 9, 9),
+			current: map[ArtifactID][]*VersionedPackage{
+				ArtifactID("pkgC"): {mkPkgA("pkgC", 0, 9, 9)},
 			},
 
 			expectedAdd: []string{
@@ -320,11 +321,11 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 			},
 
 			constraints: []*Constraint{},
-			current: map[ArtifactID]*VersionedPackage{
-				ArtifactID("pkgA"): mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0)),
-				ArtifactID("pkgB"): mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0)),
-				ArtifactID("pkgC"): mkPkgA("pkgC", 1, 0, 0),
-				ArtifactID("pkgD"): mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgA", 1, 0, 0)),
+			current: map[ArtifactID][]*VersionedPackage{
+				ArtifactID("pkgA"): {mkPkgA("pkgA", 1, 0, 0, mkMinC("pkgB", 1, 0, 0))},
+				ArtifactID("pkgB"): {mkPkgA("pkgB", 1, 0, 0, mkMinC("pkgC", 1, 0, 0))},
+				ArtifactID("pkgC"): {mkPkgA("pkgC", 1, 0, 0)},
+				ArtifactID("pkgD"): {mkPkgA("pkgD", 1, 0, 0, mkMinC("pkgA", 1, 0, 0))},
 			},
 
 			expectedRm: []string{
@@ -349,11 +350,13 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 				mkMinC("pkgA", 1, 0, 0),
 			},
 
-			expectedAdd: []string{
-				"pkgD-1.0.0",
-				"pkgC-1.0.0",
-				"pkgB-1.0.0",
-				"pkgA-1.0.0",
+			expectedFunc: func(t require.TestingT, add, _ []string) {
+				require.Len(t, add, 4, "should be four installs")
+				// pkgC and pkgD can be in either order due to the loop
+				require.ElementsMatch(t, add[0:2], []string{"pkgC-1.0.0", "pkgD-1.0.0"},
+					"first two installs should be pkgC and pkgD in any order")
+				require.ElementsMatch(t, add[2:], []string{"pkgB-1.0.0", "pkgA-1.0.0"},
+					"last two installs should be pkgB and pkgA in any order")
 			},
 		},
 	}
@@ -370,13 +373,20 @@ func TestDiffInstallations_InstallsInDependencyOrder(t *testing.T) {
 			for _, a := range add {
 				addIDs = append(addIDs, a.String())
 			}
-			require.Equal(t, test.expectedAdd, addIDs)
+			if test.expectedAdd != nil {
+				require.Equal(t, test.expectedAdd, addIDs)
+			}
 
 			var rmIDs []string
 			for _, a := range rm {
 				rmIDs = append(rmIDs, a.String())
 			}
-			require.Equal(t, test.expectedRm, rmIDs)
+			if test.expectedRm != nil {
+				require.Equal(t, test.expectedRm, rmIDs)
+			}
+			if test.expectedFunc != nil {
+				test.expectedFunc(t, addIDs, rmIDs)
+			}
 		})
 	}
 }

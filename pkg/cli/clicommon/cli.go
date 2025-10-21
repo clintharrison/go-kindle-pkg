@@ -43,7 +43,11 @@ func GetInitializedResolver(cmd *cobra.Command) (*resolver.Resolver, error) {
 			err)
 		return nil, errors.Wrap(err, "failed to fetch packages from repositories")
 	}
-	fmt.Fprintf(cmd.OutOrStdout(), "Loaded %d package\n", len(packages)) //nolint:errcheck
+	suffix := ""
+	if len(packages) > 1 {
+		suffix = "s"
+	}
+	fmt.Fprintf(cmd.OutOrStdout(), "Loaded %d package%s\n", len(packages), suffix) //nolint:errcheck
 
 	return resolver.NewResolverForRepositoryPackages(packages), nil
 }
